@@ -6,6 +6,10 @@ import '../providers/task_provider.dart';
 import '../widgets/task_editor_dialog.dart';
 import '../widgets/task_detail_sheet.dart';
 
+enum GroupFilter { none, date, priority }
+
+enum OrderFilter { date, title, priority }
+
 class TaskListView extends StatefulWidget {
   const TaskListView({super.key});
 
@@ -16,6 +20,8 @@ class TaskListView extends StatefulWidget {
 class _TaskListViewState extends State<TaskListView> {
   String _currentCategory = 'All';
   final TextEditingController _categoryController = TextEditingController();
+  GroupFilter _groupFilter = GroupFilter.none;
+  OrderFilter _orderFilter = OrderFilter.date;
 
   @override
   void dispose() {
@@ -26,15 +32,27 @@ class _TaskListViewState extends State<TaskListView> {
   @override
   Widget build(BuildContext context) {
     final taskProvider = Provider.of<TaskProvider>(context);
-    final filteredTasks = taskProvider.getTasksByCategory(_currentCategory);
+    final filteredTasks = _getFilteredAndOrderedTasks(taskProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentCategory == 'All' ? 'All Tasks' : _currentCategory),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: _showSearchDialog,
+          PopupMenuButton<String>(
+            itemBuilder:
+                (context) => [
+                  const PopupMenuItem(value: 'filter', child: Text('Filter')),
+                  const PopupMenuItem(
+                    value: 'hide_completed',
+                    child: Text('Hide Completed'),
+                  ),
+                ],
+            onSelected: (value) {
+              if (value == 'filter') {
+                _showFilterDialog();
+              }
+              // We'll implement hide completed later
+            },
           ),
         ],
       ),
@@ -42,21 +60,176 @@ class _TaskListViewState extends State<TaskListView> {
       body:
           filteredTasks.isEmpty
               ? const Center(child: Text('No tasks found'))
-              : ListView.builder(
-                itemCount: filteredTasks.length,
-                itemBuilder: (context, index) {
-                  final task = filteredTasks[index];
-                  return TaskTile(
-                    task: task,
-                    taskProvider: taskProvider,
-                    currentCategory: _currentCategory,
-                  );
-                },
-              ),
+              : _buildTaskList(filteredTasks),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddTaskDialog(taskProvider),
         child: const Icon(Icons.add),
       ),
+    );
+  }
+
+  List<Task> _getFilteredAndOrderedTasks(TaskProvider taskProvider) {
+    List<Task> tasks = taskProvider.getTasksByCategory(_currentCategory);
+    tasks = _applyOrdering(tasks);
+    return tasks;
+  }
+
+  List<Task> _applyOrdering(List<Task> tasks) {
+    switch (_orderFilter) {
+      case OrderFilter.date:
+        tasks.sort((a, b) {
+          if (a.dueTime == null && b.dueTime == null) {
+            return a.title.compareTo(b.title);
+          } else if (a.dueTime == null) {
+            return 1;
+          } else if (b.dueTime == null) {
+            return -1;
+          }
+          return a.dueTime!.compareTo(b.dueTime!);
+        });
+        break;
+      case OrderFilter.title:
+        tasks.sort((a, b) => a.title.compareTo(b.title));
+        break;
+      case OrderFilter.priority:
+        tasks.sort((a, b) {
+          if (a.priority.index != b.priority.index) {
+            return b.priority.index.compareTo(a.priority.index);
+          }
+          return a.title.compareTo(b.title);
+        });
+        break;
+    }
+    return tasks;
+  }
+
+  Widget _buildTaskList(List<Task> tasks) {
+    switch (_groupFilter) {
+      case GroupFilter.none:
+        return ListView.builder(
+          itemCount: tasks.length,
+          itemBuilder:
+              (context, index) => TaskTile(
+                task: tasks[index],
+                taskProvider: Provider.of<TaskProvider>(context),
+                currentCategory: _currentCategory,
+              ),
+        );
+      case GroupFilter.date:
+        return _buildDateGroupedList(tasks);
+      case GroupFilter.priority:
+        return _buildPriorityGroupedList(tasks);
+    }
+  }
+
+  Widget _buildDateGroupedList(List<Task> tasks) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final nextWeek = today.add(const Duration(days: 7));
+
+    final todayTasks =
+        tasks.where((task) {
+          if (task.dueTime == null) return false;
+          final dueDate = DateTime(
+            task.dueTime!.year,
+            task.dueTime!.month,
+            task.dueTime!.day,
+          );
+          return dueDate == today;
+        }).toList();
+
+    final tomorrowTasks =
+        tasks.where((task) {
+          if (task.dueTime == null) return false;
+          final dueDate = DateTime(
+            task.dueTime!.year,
+            task.dueTime!.month,
+            task.dueTime!.day,
+          );
+          return dueDate == tomorrow;
+        }).toList();
+
+    final thisWeekTasks =
+        tasks.where((task) {
+          if (task.dueTime == null) return false;
+          final dueDate = DateTime(
+            task.dueTime!.year,
+            task.dueTime!.month,
+            task.dueTime!.day,
+          );
+          return dueDate.isAfter(tomorrow) && dueDate.isBefore(nextWeek);
+        }).toList();
+
+    final laterTasks =
+        tasks.where((task) {
+          if (task.dueTime == null) return true;
+          final dueDate = DateTime(
+            task.dueTime!.year,
+            task.dueTime!.month,
+            task.dueTime!.day,
+          );
+          return dueDate.isAfter(nextWeek) || dueDate.isBefore(today);
+        }).toList();
+
+    return ListView(
+      children: [
+        if (todayTasks.isNotEmpty) _buildTaskGroup('Today', todayTasks),
+        if (tomorrowTasks.isNotEmpty)
+          _buildTaskGroup('Tomorrow', tomorrowTasks),
+        if (thisWeekTasks.isNotEmpty)
+          _buildTaskGroup('This Week', thisWeekTasks),
+        if (laterTasks.isNotEmpty) _buildTaskGroup('Later', laterTasks),
+      ],
+    );
+  }
+
+  Widget _buildPriorityGroupedList(List<Task> tasks) {
+    final highPriority =
+        tasks.where((t) => t.priority == TaskPriority.high).toList();
+    final mediumPriority =
+        tasks.where((t) => t.priority == TaskPriority.medium).toList();
+    final lowPriority =
+        tasks.where((t) => t.priority == TaskPriority.low).toList();
+    final noPriority =
+        tasks.where((t) => t.priority == TaskPriority.none).toList();
+
+    return ListView(
+      children: [
+        if (highPriority.isNotEmpty)
+          _buildTaskGroup('High Priority', highPriority),
+        if (mediumPriority.isNotEmpty)
+          _buildTaskGroup('Medium Priority', mediumPriority),
+        if (lowPriority.isNotEmpty)
+          _buildTaskGroup('Low Priority', lowPriority),
+        if (noPriority.isNotEmpty) _buildTaskGroup('No Priority', noPriority),
+      ],
+    );
+  }
+
+  Widget _buildTaskGroup(String title, List<Task> tasks) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
+        ),
+        ...tasks.map(
+          (task) => TaskTile(
+            task: task,
+            taskProvider: Provider.of<TaskProvider>(context),
+            currentCategory: _currentCategory,
+          ),
+        ),
+      ],
     );
   }
 
@@ -141,11 +314,88 @@ class _TaskListViewState extends State<TaskListView> {
     );
   }
 
-  void _showSearchDialog() {
-    showDialog(context: context, builder: (context) => const SearchDialog());
+  Future<void> _showFilterDialog() async {
+    await showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Filter Tasks'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Group by:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Column(
+                  children:
+                      GroupFilter.values.map((filter) {
+                        return RadioListTile<GroupFilter>(
+                          title: Text(_getGroupFilterText(filter)),
+                          value: filter,
+                          groupValue: _groupFilter,
+                          onChanged: (value) {
+                            setState(() => _groupFilter = value!);
+                            Navigator.pop(context);
+                          },
+                        );
+                      }).toList(),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Order by:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Column(
+                  children:
+                      OrderFilter.values.map((filter) {
+                        return RadioListTile<OrderFilter>(
+                          title: Text(_getOrderFilterText(filter)),
+                          value: filter,
+                          groupValue: _orderFilter,
+                          onChanged: (value) {
+                            setState(() => _orderFilter = value!);
+                            Navigator.pop(context);
+                          },
+                        );
+                      }).toList(),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  String _getGroupFilterText(GroupFilter filter) {
+    switch (filter) {
+      case GroupFilter.none:
+        return 'None';
+      case GroupFilter.date:
+        return 'Date';
+      case GroupFilter.priority:
+        return 'Priority';
+    }
+  }
+
+  String _getOrderFilterText(OrderFilter filter) {
+    switch (filter) {
+      case OrderFilter.date:
+        return 'Date';
+      case OrderFilter.title:
+        return 'Title';
+      case OrderFilter.priority:
+        return 'Priority';
+    }
   }
 }
 
+// ... [Keep all your extracted widgets like TaskTile, TaskCheckbox, etc.]
 // Extracted Widgets
 
 class TaskTile extends StatelessWidget {
@@ -387,26 +637,6 @@ class AddCategoryDialog extends StatelessWidget {
           child: const Text('Cancel'),
         ),
         ElevatedButton(onPressed: onAdd, child: const Text('Add')),
-      ],
-    );
-  }
-}
-
-class SearchDialog extends StatelessWidget {
-  const SearchDialog({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Search Tasks'),
-      content: const TextField(
-        decoration: InputDecoration(hintText: 'Enter task name...'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
       ],
     );
   }
