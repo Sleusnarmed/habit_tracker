@@ -1,23 +1,33 @@
 // providers/task_provider.dart
 import 'package:flutter/material.dart';
-import 'package:habit_tracker/models/task.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/task.dart';
 
 class TaskProvider with ChangeNotifier {
   final Box<Task> _tasksBox;
+  late final Box<List<String>> _categoriesBox;
+  List<String> _customCategories = ['Work', 'Study', 'Shopping'];
 
-  TaskProvider(this._tasksBox);
+  TaskProvider(this._tasksBox) {
+    // Initialize categories box
+    _initCategories();
+  }
 
-  List<Task> get tasks => _tasksBox.values.toList();
+  Future<void> _initCategories() async {
+    _categoriesBox = await Hive.openBox<List<String>>('categories_box');
+    _customCategories = _categoriesBox.get('categories', defaultValue: _customCategories) ?? _customCategories;
+  }
+
+  List<Task> get tasks => _tasksBox.values.whereType<Task>().toList();
+  List<String> get categories => ['All', ..._customCategories];
 
   List<Task> getTasksByCategory(String category) {
     if (category == 'All') return tasks;
     return tasks.where((task) => task.category == category).toList();
   }
 
-  List<String> get categories {
-    final allCategories = tasks.map((task) => task.category).toSet().toList();
-    return ['All', ...allCategories];
+  Future<void> _saveCategories() async {
+    await _categoriesBox.put('categories', _customCategories);
   }
 
   Future<void> addTask(Task task) async {
@@ -41,7 +51,16 @@ class TaskProvider with ChangeNotifier {
   }
 
   Future<void> addCategory(String category) async {
-    // Categories are derived from tasks, so we just need to notify
+    if (!_customCategories.contains(category)) {
+      _customCategories.add(category);
+      await _saveCategories();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeCategory(String category) async {
+    _customCategories.remove(category);
+    await _saveCategories();
     notifyListeners();
   }
 }

@@ -22,9 +22,12 @@ void main() async {
 
   // Register adapters (generated in step 3)
   Hive.registerAdapter(TaskAdapter());
+  Hive.registerAdapter(TaskPriorityAdapter());
+  Hive.registerAdapter(TaskRepetitionAdapter());
 
   // Open boxes (like database tables)
   final Box<Task> tasksBox = await Hive.openBox<Task>('tasks');
+  await Hive.openBox<List<String>>('categories_box'); // For Categories
 
   runApp(
     ChangeNotifierProvider(
