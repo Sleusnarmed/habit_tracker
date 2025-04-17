@@ -1,19 +1,22 @@
-import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 
+part 'task.g.dart'; // Generated file
+
+@HiveType(typeId: 0)
 class Task {
-  final String id;
-  final String title;
-  final String category;
-  bool isCompleted;
-  DateTime? dueDate; // Add this field
-  TimeOfDay? dueTime; // Add this field
-
-  Task({
-    required this.id,
-    required this.title,
-    required this.category,
-    this.isCompleted = false,
-    this.dueDate,
-    this.dueTime,
-  });
+  @HiveField(0) final String id;
+  @HiveField(1) final String title;
+  @HiveField(2) final String category;
+  @HiveField(3) bool isCompleted;
+  
+  Task({required this.id, required this.title, required this.category, this.isCompleted = false});
+  
+  Task copyWith({bool? isCompleted}) {
+    return Task(
+      id: id,
+      title: title,
+      category: category,
+      isCompleted: isCompleted ?? this.isCompleted,
+    );
+  }
 }

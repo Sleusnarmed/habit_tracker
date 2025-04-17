@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:habit_tracker/models/task.dart'; // You'll need to create this model
+import 'package:provider/provider.dart';
+import '../models/task.dart';
+import '../providers/task_provider.dart';
 
 class TaskListView extends StatefulWidget {
   const TaskListView({super.key});
@@ -10,12 +12,6 @@ class TaskListView extends StatefulWidget {
 }
 
 class _TaskListViewState extends State<TaskListView> {
-  final List<Task> _tasks = [
-    Task(id: '1', title: 'Complete project proposal', category: 'Work', isCompleted: false),
-    Task(id: '2', title: 'Buy groceries', category: 'Shopping', isCompleted: true),
-    Task(id: '3', title: 'Study Flutter', category: 'Study', isCompleted: false),
-  ];
-
   String _currentCategory = 'All';
   final TextEditingController _taskController = TextEditingController();
   final TextEditingController _categoryController = TextEditingController();
@@ -29,9 +25,8 @@ class _TaskListViewState extends State<TaskListView> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredTasks = _currentCategory == 'All'
-        ? _tasks
-        : _tasks.where((task) => task.category == _currentCategory).toList();
+    final taskProvider = Provider.of<TaskProvider>(context);
+    final filteredTasks = taskProvider.getTasksByCategory(_currentCategory);
 
     return Scaffold(
       appBar: AppBar(
@@ -43,26 +38,24 @@ class _TaskListViewState extends State<TaskListView> {
           ),
         ],
       ),
-      drawer: _buildDrawer(),
+      drawer: _buildDrawer(taskProvider),
       body: filteredTasks.isEmpty
           ? const Center(child: Text('No tasks found'))
           : ListView.builder(
               itemCount: filteredTasks.length,
               itemBuilder: (context, index) {
                 final task = filteredTasks[index];
-                return _buildTaskTile(task);
+                return _buildTaskTile(taskProvider, task);
               },
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTaskDialog(),
+        onPressed: () => _showAddTaskDialog(taskProvider),
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildDrawer() {
-    final categories = ['All', 'Work', 'Study', 'Shopping'];
-    
+  Widget _buildDrawer(TaskProvider taskProvider) {
     return Drawer(
       child: Column(
         children: [
@@ -77,9 +70,9 @@ class _TaskListViewState extends State<TaskListView> {
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: categories.length,
+              itemCount: taskProvider.categories.length,
               itemBuilder: (context, index) {
-                final category = categories[index];
+                final category = taskProvider.categories[index];
                 return ListTile(
                   leading: _getCategoryIcon(category),
                   title: Text(category),
@@ -97,7 +90,7 @@ class _TaskListViewState extends State<TaskListView> {
             child: ElevatedButton.icon(
               icon: const Icon(Icons.add),
               label: const Text('Add New List'),
-              onPressed: () => _showAddCategoryDialog(),
+              onPressed: () => _showAddCategoryDialog(taskProvider),
             ),
           ),
         ],
@@ -105,7 +98,7 @@ class _TaskListViewState extends State<TaskListView> {
     );
   }
 
-  Widget _buildTaskTile(Task task) {
+  Widget _buildTaskTile(TaskProvider taskProvider, Task task) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Slidable(
@@ -113,7 +106,7 @@ class _TaskListViewState extends State<TaskListView> {
           motion: const DrawerMotion(),
           children: [
             SlidableAction(
-              onPressed: (context) => _deleteTask(task.id),
+              onPressed: (context) => taskProvider.deleteTask(task.id),
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
               icon: Icons.delete,
@@ -123,10 +116,11 @@ class _TaskListViewState extends State<TaskListView> {
         ),
         child: CheckboxListTile(
           value: task.isCompleted,
-          onChanged: (value) => _toggleTaskCompletion(task.id),
+          onChanged: (value) => taskProvider.toggleTaskCompletion(task),
           title: Text(
             task.title,
             style: TextStyle(
+              color: task.isCompleted ? Colors.grey : null,
               decoration: task.isCompleted ? TextDecoration.lineThrough : null,
             ),
           ),
@@ -149,25 +143,7 @@ class _TaskListViewState extends State<TaskListView> {
     }
   }
 
-  void _toggleTaskCompletion(String taskId) {
-    setState(() {
-      final taskIndex = _tasks.indexWhere((task) => task.id == taskId);
-      if (taskIndex != -1) {
-        _tasks[taskIndex].isCompleted = !_tasks[taskIndex].isCompleted;
-      }
-    });
-  }
-
-  void _deleteTask(String taskId) {
-    setState(() {
-      _tasks.removeWhere((task) => task.id == taskId);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task deleted')),
-    );
-  }
-
-  void _showAddTaskDialog() {
+  void _showAddTaskDialog(TaskProvider taskProvider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -182,7 +158,8 @@ class _TaskListViewState extends State<TaskListView> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: _currentCategory == 'All' ? 'Work' : _currentCategory,
-              items: ['Work', 'Study', 'Shopping']
+              items: taskProvider.categories
+                  .where((c) => c != 'All')
                   .map((category) => DropdownMenuItem(
                         value: category,
                         child: Text(category),
@@ -201,15 +178,13 @@ class _TaskListViewState extends State<TaskListView> {
           ElevatedButton(
             onPressed: () {
               if (_taskController.text.isNotEmpty) {
-                setState(() {
-                  _tasks.add(Task(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    title: _taskController.text,
-                    category: _currentCategory,
-                    isCompleted: false,
-                  ));
-                  _taskController.clear();
-                });
+                taskProvider.addTask(Task(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  title: _taskController.text,
+                  category: _currentCategory,
+                  isCompleted: false,
+                ));
+                _taskController.clear();
                 Navigator.pop(context);
               }
             },
@@ -220,7 +195,7 @@ class _TaskListViewState extends State<TaskListView> {
     );
   }
 
-  void _showAddCategoryDialog() {
+  void _showAddCategoryDialog(TaskProvider taskProvider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -237,10 +212,7 @@ class _TaskListViewState extends State<TaskListView> {
           ElevatedButton(
             onPressed: () {
               if (_categoryController.text.isNotEmpty) {
-                // In a real app, you would add this to your categories list
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${_categoryController.text} category added')),
-                );
+                taskProvider.addCategory(_categoryController.text);
                 _categoryController.clear();
                 Navigator.pop(context);
               }
