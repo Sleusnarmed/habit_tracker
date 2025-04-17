@@ -26,7 +26,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   late TaskPriority _priority;
   DateTime? _dueDate;
   TimeOfDay? _startTime;
-  Duration? _duration;
+  TimeOfDay? _endTime;
   late TaskRepetition _repetition;
 
   @override
@@ -38,11 +38,16 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     _category = task?.category ?? widget.initialCategory;
     _priority = task?.priority ?? TaskPriority.none;
     _dueDate = task?.dueTime;
-    _startTime = task?.dueTime != null 
-        ? TimeOfDay.fromDateTime(task!.dueTime!) 
-        : null;
-    _duration = task?.duration;
     _repetition = task?.repetition ?? TaskRepetition.never;
+
+    // Initialize time range from existing task
+    if (task?.dueTime != null) {
+      _startTime = TimeOfDay.fromDateTime(task!.dueTime!);
+      if (task.duration != null) {
+        final endTime = task.dueTime!.add(task.duration!);
+        _endTime = TimeOfDay.fromDateTime(endTime);
+      }
+    }
   }
 
   @override
@@ -50,6 +55,28 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     _titleController.dispose();
     _descController.dispose();
     super.dispose();
+  }
+
+  Duration? get _duration {
+    if (_startTime == null || _endTime == null) return null;
+
+    final now = DateTime.now();
+    final startDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _startTime!.hour,
+      _startTime!.minute,
+    );
+    final endDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _endTime!.hour,
+      _endTime!.minute,
+    );
+
+    return endDateTime.difference(startDateTime);
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -64,52 +91,62 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     }
   }
 
-  Future<void> _selectTime(BuildContext context) async {
+  Future<void> _selectStartTime(BuildContext context) async {
     final picked = await showTimePicker(
       context: context,
       initialTime: _startTime ?? TimeOfDay.now(),
     );
     if (picked != null) {
-      setState(() => _startTime = picked);
-      // Clear duration if time changes
-      if (_duration != null) {
-        setState(() => _duration = null);
-      }
+      setState(() {
+        _startTime = picked;
+        // Reset end time if it's now before start time
+        if (_endTime != null && _isTimeBefore(_endTime!, picked)) {
+          _endTime = null;
+        }
+      });
     }
   }
 
-  Future<void> _selectDuration(BuildContext context) async {
-    final initialHours = _duration?.inHours ?? 1;
-    final initialMinutes = _duration?.inMinutes.remainder(60) ?? 0;
+  Future<void> _selectEndTime(BuildContext context) async {
+    if (_startTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select start time first')),
+      );
+      return;
+    }
 
-    final result = await showDialog<Duration>(
+    // Calculate initial end time safely
+    TimeOfDay initialEndTime;
+    try {
+      initialEndTime =
+          _endTime ??
+          _startTime!.replacing(
+            minute: (_startTime!.minute + 30) % 60,
+            hour: _startTime!.hour + ((_startTime!.minute + 30) ~/ 60),
+          );
+    } catch (e) {
+      initialEndTime = _startTime!.replacing(hour: _startTime!.hour + 1);
+    }
+
+    final picked = await showTimePicker(
       context: context,
-      builder: (context) => DurationPickerDialog(
-        initialHours: initialHours,
-        initialMinutes: initialMinutes,
-      ),
+      initialTime: initialEndTime,
     );
 
-    if (result != null) {
-      // Validate duration doesn't cross midnight
-      if (_startTime != null) {
-        final startDateTime = DateTime(
-          _dueDate?.year ?? DateTime.now().year,
-          _dueDate?.month ?? DateTime.now().month,
-          _dueDate?.day ?? DateTime.now().day,
-          _startTime!.hour,
-          _startTime!.minute,
+    if (picked != null) {
+      if (_isTimeBefore(picked, _startTime!)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time')),
         );
-        final endDateTime = startDateTime.add(result);
-        if (endDateTime.day != startDateTime.day) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Duration cannot cross midnight')),
-          );
-          return;
-        }
+        return;
       }
-      setState(() => _duration = result);
+
+      setState(() => _endTime = picked);
     }
+  }
+
+  bool _isTimeBefore(TimeOfDay a, TimeOfDay b) {
+    return a.hour < b.hour || (a.hour == b.hour && a.minute < b.minute);
   }
 
   Task _buildTask() {
@@ -122,10 +159,27 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         _startTime!.hour,
         _startTime!.minute,
       );
+
+      // Validate duration doesn't cross midnight
+      if (_endTime != null) {
+        final endDateTime = DateTime(
+          _dueDate!.year,
+          _dueDate!.month,
+          _dueDate!.day,
+          _endTime!.hour,
+          _endTime!.minute,
+        );
+
+        if (endDateTime.day != dueTime.day) {
+          throw ArgumentError('Duration cannot cross midnight');
+        }
+      }
     }
 
     return Task(
-      id: widget.initialTask?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id:
+          widget.initialTask?.id ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       title: _titleController.text,
       category: _category,
       description: _descController.text,
@@ -133,6 +187,45 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       dueTime: dueTime,
       duration: _duration,
       repetition: _repetition,
+    );
+  }
+
+  Widget _buildTimeRangeSection() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _selectStartTime(context),
+                child: Text(
+                  _startTime == null
+                      ? 'Select Start Time'
+                      : _startTime!.format(context),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _selectEndTime(context),
+                child: Text(
+                  _endTime == null
+                      ? 'Select End Time'
+                      : _endTime!.format(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_startTime != null && _endTime != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Time Range: ${_startTime!.format(context)} - ${_endTime!.format(context)}',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+      ],
     );
   }
 
@@ -157,32 +250,40 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: _category,
-              items: widget.categories
-                  .where((c) => c != 'All')
-                  .map((category) => DropdownMenuItem(
-                        value: category,
-                        child: Text(category),
-                      ))
-                  .toList(),
+              items:
+                  widget.categories
+                      .where((c) => c != 'All')
+                      .map(
+                        (category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ),
+                      )
+                      .toList(),
               onChanged: (value) => setState(() => _category = value!),
               decoration: const InputDecoration(labelText: 'Category'),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<TaskPriority>(
               value: _priority,
-              items: TaskPriority.values.map((priority) => DropdownMenuItem(
-                    value: priority,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.flag,
-                          color: _getPriorityColor(priority),
+              items:
+                  TaskPriority.values
+                      .map(
+                        (priority) => DropdownMenuItem(
+                          value: priority,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.flag,
+                                color: _getPriorityColor(priority),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(_getPriorityText(priority)),
+                            ],
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(_getPriorityText(priority)),
-                      ],
-                    ),
-                  )).toList(),
+                      )
+                      .toList(),
               onChanged: (value) => setState(() => _priority = value!),
               decoration: const InputDecoration(labelText: 'Priority'),
             ),
@@ -192,38 +293,29 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => _selectDate(context),
-                    child: Text(_dueDate == null 
-                        ? 'Select Date' 
-                        : DateFormat.yMMMd().format(_dueDate!)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _selectTime(context),
-                    child: Text(_startTime == null 
-                        ? 'Select Time' 
-                        : _startTime!.format(context)),
+                    child: Text(
+                      _dueDate == null
+                          ? 'Select Date'
+                          : DateFormat.yMMMd().format(_dueDate!),
+                    ),
                   ),
                 ),
               ],
             ),
-            if (_startTime != null) ...[
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () => _selectDuration(context),
-                child: Text(_duration == null 
-                    ? 'Add Duration' 
-                    : '${_duration!.inHours}h ${_duration!.inMinutes.remainder(60)}m'),
-              ),
-            ],
+            const SizedBox(height: 16),
+            _buildTimeRangeSection(),
             const SizedBox(height: 16),
             DropdownButtonFormField<TaskRepetition>(
               value: _repetition,
-              items: TaskRepetition.values.map((repeat) => DropdownMenuItem(
-                    value: repeat,
-                    child: Text(_getRepetitionText(repeat)),
-                  )).toList(),
+              items:
+                  TaskRepetition.values
+                      .map(
+                        (repeat) => DropdownMenuItem(
+                          value: repeat,
+                          child: Text(_getRepetitionText(repeat)),
+                        ),
+                      )
+                      .toList(),
               onChanged: (value) => setState(() => _repetition = value!),
               decoration: const InputDecoration(labelText: 'Repeat'),
             ),
@@ -243,7 +335,13 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
               );
               return;
             }
-            Navigator.pop(context, _buildTask());
+            try {
+              Navigator.pop(context, _buildTask());
+            } on ArgumentError catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(e.message ?? 'Invalid time range')),
+              );
+            }
           },
           child: const Text('Save'),
         ),
@@ -276,74 +374,5 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
 extension StringExtension on String {
   String capitalize() {
     return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
-  }
-}
-
-class DurationPickerDialog extends StatelessWidget {
-  final int initialHours;
-  final int initialMinutes;
-
-  const DurationPickerDialog({
-    super.key,
-    required this.initialHours,
-    required this.initialMinutes,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    int hours = initialHours;
-    int minutes = initialMinutes;
-
-    return AlertDialog(
-      title: const Text('Select Duration'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              const Text('Hours:'),
-              const SizedBox(width: 16),
-              DropdownButton<int>(
-                value: hours,
-                items: List.generate(24, (i) => DropdownMenuItem(
-                      value: i,
-                      child: Text('$i'),
-                    )),
-                onChanged: (value) => hours = value!,
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              const Text('Minutes:'),
-              const SizedBox(width: 16),
-              DropdownButton<int>(
-                value: minutes,
-                items: [0, 15, 30, 45].map((i) => DropdownMenuItem(
-                      value: i,
-                      child: Text('$i'),
-                    )).toList(),
-                onChanged: (value) => minutes = value!,
-              ),
-            ],
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.pop(
-              context,
-              Duration(hours: hours, minutes: minutes),
-            );
-          },
-          child: const Text('OK'),
-        ),
-      ],
-    );
   }
 }

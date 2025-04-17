@@ -39,16 +39,15 @@ class _TaskListViewState extends State<TaskListView> {
         ],
       ),
       drawer: _buildDrawer(taskProvider),
-      body:
-          filteredTasks.isEmpty
-              ? const Center(child: Text('No tasks found'))
-              : ListView.builder(
-                itemCount: filteredTasks.length,
-                itemBuilder: (context, index) {
-                  final task = filteredTasks[index];
-                  return _buildTaskTile(taskProvider, task);
-                },
-              ),
+      body: filteredTasks.isEmpty
+          ? const Center(child: Text('No tasks found'))
+          : ListView.builder(
+              itemCount: filteredTasks.length,
+              itemBuilder: (context, index) {
+                final task = filteredTasks[index];
+                return _buildTaskTile(taskProvider, task);
+              },
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddTaskDialog(taskProvider),
         child: const Icon(Icons.add),
@@ -99,108 +98,127 @@ class _TaskListViewState extends State<TaskListView> {
     );
   }
 
-// Update the _buildTaskTile method
-Widget _buildTaskTile(TaskProvider taskProvider, Task task) {
-  final priorityColor = _getPriorityColor(task.priority);
-  final isCompleted = task.isCompleted;
-  
-  return GestureDetector(
-    onTap: () {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        builder: (context) => TaskDetailSheet(
-          task: task,
-          categories: taskProvider.categories.where((c) => c != 'All').toList(),
-          onSave: (updatedTask) => taskProvider.updateTask(updatedTask),
-          onDelete: () => taskProvider.deleteTask(task.id),
-        ),
-      );
-    },
-    child: Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      color: isCompleted ? Colors.grey[200] : null,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isCompleted ? Colors.grey : priorityColor,
-                  width: 2,
-                ),
-              ),
-              child: IconButton(
-                icon: Icon(
-                  isCompleted ? Icons.check : Icons.circle,
-                  color: isCompleted ? Colors.grey : priorityColor,
-                ),
-                onPressed: () => taskProvider.toggleTaskCompletion(task),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      decoration: isCompleted ? TextDecoration.lineThrough : null,
-                      color: isCompleted ? Colors.grey : null,
-                    ),
+  Widget _buildTaskTile(TaskProvider taskProvider, Task task) {
+    final priorityColor = _getPriorityColor(task.priority);
+    final isCompleted = task.isCompleted;
+    
+    return GestureDetector(
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          builder: (context) => TaskDetailSheet(
+            task: task,
+            categories: taskProvider.categories.where((c) => c != 'All').toList(),
+            onSave: (updatedTask) => taskProvider.updateTask(updatedTask),
+            onDelete: () => taskProvider.deleteTask(task.id),
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        color: isCompleted ? Colors.grey[200] : null,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isCompleted ? Colors.grey : priorityColor,
+                    width: 2,
                   ),
-                  if (task.dueTime != null || task.repetition != TaskRepetition.never)
-                    const SizedBox(height: 4),
-                  if (task.dueTime != null || task.repetition != TaskRepetition.never)
-                    Row(
-                      children: [
-                        if (task.dueTime != null)
-                          Text(
-                            DateFormat('MMM d, h:mm a').format(task.dueTime!),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        if (task.dueTime != null && task.repetition != TaskRepetition.never)
-                          const SizedBox(width: 8),
-                        if (task.repetition != TaskRepetition.never)
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    isCompleted ? Icons.check : Icons.circle,
+                    color: isCompleted ? Colors.grey : priorityColor,
+                  ),
+                  onPressed: () => taskProvider.toggleTaskCompletion(task),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        decoration: isCompleted ? TextDecoration.lineThrough : null,
+                        color: isCompleted ? Colors.grey : null,
+                      ),
+                    ),
+                    if (task.dueTime != null || task.repetition != TaskRepetition.never)
+                      const SizedBox(height: 4),
+                    if (task.dueTime != null)
+                      Text(
+                        _getTimeDisplayText(task),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    if (task.repetition != TaskRepetition.never && task.dueTime == null)
+                      const SizedBox(height: 4),
+                    if (task.repetition != TaskRepetition.never)
+                      Row(
+                        children: [
                           Icon(
                             Icons.repeat,
                             size: 14,
                             color: Colors.grey[600],
                           ),
-                      ],
-                    ),
-                ],
+                          const SizedBox(width: 4),
+                          Text(
+                            _getRepetitionText(task.repetition),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
-
-// Update the priority color method
-Color _getPriorityColor(TaskPriority priority) {
-  switch (priority) {
-    case TaskPriority.high:
-      return Colors.red;
-    case TaskPriority.medium:
-      return Colors.orange;
-    case TaskPriority.low:
-      return Colors.blue;
-    case TaskPriority.none:
-      return Colors.grey;
+    );
   }
-}
+
+  String _getTimeDisplayText(Task task) {
+    if (task.dueTime == null) return '';
+    
+    final dateFormat = DateFormat('MMM d');
+    final timeFormat = DateFormat('h:mm a');
+    
+    if (task.duration != null) {
+      final endTime = task.dueTime!.add(task.duration!);
+      return '${dateFormat.format(task.dueTime!)} • ${timeFormat.format(task.dueTime!)} - ${timeFormat.format(endTime)}';
+    } else {
+      return '${dateFormat.format(task.dueTime!)} • ${timeFormat.format(task.dueTime!)}';
+    }
+  }
+
+  Color _getPriorityColor(TaskPriority priority) {
+    switch (priority) {
+      case TaskPriority.high:
+        return Colors.red;
+      case TaskPriority.medium:
+        return Colors.orange;
+      case TaskPriority.low:
+        return Colors.blue;
+      case TaskPriority.none:
+        return Colors.grey;
+    }
+  }
 
   String _getRepetitionText(TaskRepetition repeat) {
     switch (repeat) {
@@ -237,69 +255,69 @@ Color _getPriorityColor(TaskPriority priority) {
   Future<void> _showAddTaskDialog(TaskProvider taskProvider) async {
     final task = await showDialog<Task>(
       context: context,
-      builder:
-          (context) => TaskEditorDialog(
-            initialCategory:
-                _currentCategory == 'All' ? 'Work' : _currentCategory,
-            categories:
-                taskProvider.categories.where((c) => c != 'All').toList(),
-          ),
+      builder: (context) => TaskEditorDialog(
+        initialCategory: _currentCategory == 'All' ? 'Work' : _currentCategory,
+        categories: taskProvider.categories.where((c) => c != 'All').toList(),
+      ),
     );
 
     if (task != null) {
       await taskProvider.addTask(task);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Task added successfully')),
+        );
+      }
     }
   }
 
   void _showAddCategoryDialog(TaskProvider taskProvider) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Add New Category'),
-            content: TextField(
-              controller: _categoryController,
-              decoration: const InputDecoration(labelText: 'Category Name'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (_categoryController.text.isNotEmpty) {
-                    taskProvider.addCategory(_categoryController.text);
-                    _categoryController.clear();
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Add'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Category'),
+        content: TextField(
+          controller: _categoryController,
+          decoration: const InputDecoration(labelText: 'Category Name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              if (_categoryController.text.isNotEmpty) {
+                taskProvider.addCategory(_categoryController.text);
+                _categoryController.clear();
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
     );
   }
 
   void _showSearchDialog() {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Search Tasks'),
-            content: TextField(
-              decoration: const InputDecoration(hintText: 'Enter task name...'),
-              onChanged: (query) {
-                // Implement search functionality
-              },
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Search Tasks'),
+        content: TextField(
+          decoration: const InputDecoration(hintText: 'Enter task name...'),
+          onChanged: (query) {
+            // Implement search functionality
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
           ),
+        ],
+      ),
     );
   }
 }

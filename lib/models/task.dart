@@ -149,3 +149,19 @@ class TaskRepetitionAdapter extends TypeAdapter<TaskRepetition> {
     writer.writeByte(obj.index);
   }
 }
+
+class DurationAdapter extends TypeAdapter<Duration> {
+  @override
+  final int typeId = 12; // Choose a unique typeId (not used by other adapters)
+
+  @override
+  Duration read(BinaryReader reader) {
+    final microseconds = reader.readInt();
+    return Duration(microseconds: microseconds);
+  }
+
+  @override
+  void write(BinaryWriter writer, Duration obj) {
+    writer.writeInt(obj.inMicroseconds);
+  }
+}
