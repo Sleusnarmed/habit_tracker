@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../widgets/task_editor_dialog.dart';
+import '../widgets/task_detail_sheet.dart';
+import 'package:intl/intl.dart';
 
 class TaskListView extends StatefulWidget {
   const TaskListView({super.key});
@@ -38,15 +39,16 @@ class _TaskListViewState extends State<TaskListView> {
         ],
       ),
       drawer: _buildDrawer(taskProvider),
-      body: filteredTasks.isEmpty
-          ? const Center(child: Text('No tasks found'))
-          : ListView.builder(
-              itemCount: filteredTasks.length,
-              itemBuilder: (context, index) {
-                final task = filteredTasks[index];
-                return _buildTaskTile(taskProvider, task);
-              },
-            ),
+      body:
+          filteredTasks.isEmpty
+              ? const Center(child: Text('No tasks found'))
+              : ListView.builder(
+                itemCount: filteredTasks.length,
+                itemBuilder: (context, index) {
+                  final task = filteredTasks[index];
+                  return _buildTaskTile(taskProvider, task);
+                },
+              ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddTaskDialog(taskProvider),
         child: const Icon(Icons.add),
@@ -97,104 +99,108 @@ class _TaskListViewState extends State<TaskListView> {
     );
   }
 
-  Widget _buildTaskTile(TaskProvider taskProvider, Task task) {
-    return Card(
+// Update the _buildTaskTile method
+Widget _buildTaskTile(TaskProvider taskProvider, Task task) {
+  final priorityColor = _getPriorityColor(task.priority);
+  final isCompleted = task.isCompleted;
+  
+  return GestureDetector(
+    onTap: () {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => TaskDetailSheet(
+          task: task,
+          categories: taskProvider.categories.where((c) => c != 'All').toList(),
+          onSave: (updatedTask) => taskProvider.updateTask(updatedTask),
+          onDelete: () => taskProvider.deleteTask(task.id),
+        ),
+      );
+    },
+    child: Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Slidable(
-        endActionPane: ActionPane(
-          motion: const DrawerMotion(),
+      color: isCompleted ? Colors.grey[200] : null,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
           children: [
-            SlidableAction(
-              onPressed: (context) => taskProvider.deleteTask(task.id),
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              icon: Icons.delete,
-              label: 'Delete',
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isCompleted ? Colors.grey : priorityColor,
+                  width: 2,
+                ),
+              ),
+              child: IconButton(
+                icon: Icon(
+                  isCompleted ? Icons.check : Icons.circle,
+                  color: isCompleted ? Colors.grey : priorityColor,
+                ),
+                onPressed: () => taskProvider.toggleTaskCompletion(task),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      decoration: isCompleted ? TextDecoration.lineThrough : null,
+                      color: isCompleted ? Colors.grey : null,
+                    ),
+                  ),
+                  if (task.dueTime != null || task.repetition != TaskRepetition.never)
+                    const SizedBox(height: 4),
+                  if (task.dueTime != null || task.repetition != TaskRepetition.never)
+                    Row(
+                      children: [
+                        if (task.dueTime != null)
+                          Text(
+                            DateFormat('MMM d, h:mm a').format(task.dueTime!),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        if (task.dueTime != null && task.repetition != TaskRepetition.never)
+                          const SizedBox(width: 8),
+                        if (task.repetition != TaskRepetition.never)
+                          Icon(
+                            Icons.repeat,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ],
         ),
-        child: ListTile(
-          leading: Checkbox(
-            value: task.isCompleted,
-            onChanged: (value) => taskProvider.toggleTaskCompletion(task),
-          ),
-          title: Row(
-            children: [
-              if (task.priority != TaskPriority.none)
-                Icon(
-                  Icons.flag,
-                  color: _getPriorityColor(task.priority),
-                  size: 18,
-                ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  task.title,
-                  style: TextStyle(
-                    color: task.isCompleted ? Colors.grey : null,
-                    decoration: task.isCompleted ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (task.description.isNotEmpty) Text(task.description),
-              if (task.dueTime != null) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      task.duration != null
-                          ? task.formattedDuration!
-                          : task.formattedTime!,
-                      style: TextStyle(
-                        color: task.isCompleted ? Colors.grey : null,
-                      ),
-                    ),
-                    if (task.repetition != TaskRepetition.never) ...[
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.repeat,
-                        size: 14,
-                        color: task.isCompleted ? Colors.grey : Colors.blue,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _getRepetitionText(task.repetition),
-                        style: TextStyle(
-                          color: task.isCompleted ? Colors.grey : Colors.blue,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ],
-          ),
-          trailing: _getCategoryIcon(task.category),
-        ),
       ),
-    );
-  }
+    ),
+  );
+}
 
-  Color _getPriorityColor(TaskPriority priority) {
-    switch (priority) {
-      case TaskPriority.high:
-        return Colors.red;
-      case TaskPriority.medium:
-        return Colors.orange;
-      case TaskPriority.low:
-        return Colors.blue;
-      case TaskPriority.none:
-        return Colors.grey;
-    }
+// Update the priority color method
+Color _getPriorityColor(TaskPriority priority) {
+  switch (priority) {
+    case TaskPriority.high:
+      return Colors.red;
+    case TaskPriority.medium:
+      return Colors.orange;
+    case TaskPriority.low:
+      return Colors.blue;
+    case TaskPriority.none:
+      return Colors.grey;
   }
+}
 
   String _getRepetitionText(TaskRepetition repeat) {
     switch (repeat) {
@@ -231,10 +237,13 @@ class _TaskListViewState extends State<TaskListView> {
   Future<void> _showAddTaskDialog(TaskProvider taskProvider) async {
     final task = await showDialog<Task>(
       context: context,
-      builder: (context) => TaskEditorDialog(
-        initialCategory: _currentCategory == 'All' ? 'Work' : _currentCategory,
-        categories: taskProvider.categories.where((c) => c != 'All').toList(),
-      ),
+      builder:
+          (context) => TaskEditorDialog(
+            initialCategory:
+                _currentCategory == 'All' ? 'Work' : _currentCategory,
+            categories:
+                taskProvider.categories.where((c) => c != 'All').toList(),
+          ),
     );
 
     if (task != null) {
@@ -245,50 +254,52 @@ class _TaskListViewState extends State<TaskListView> {
   void _showAddCategoryDialog(TaskProvider taskProvider) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Category'),
-        content: TextField(
-          controller: _categoryController,
-          decoration: const InputDecoration(labelText: 'Category Name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Add New Category'),
+            content: TextField(
+              controller: _categoryController,
+              decoration: const InputDecoration(labelText: 'Category Name'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (_categoryController.text.isNotEmpty) {
+                    taskProvider.addCategory(_categoryController.text);
+                    _categoryController.clear();
+                    Navigator.pop(context);
+                  }
+                },
+                child: const Text('Add'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              if (_categoryController.text.isNotEmpty) {
-                taskProvider.addCategory(_categoryController.text);
-                _categoryController.clear();
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
     );
   }
 
   void _showSearchDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Search Tasks'),
-        content: TextField(
-          decoration: const InputDecoration(hintText: 'Enter task name...'),
-          onChanged: (query) {
-            // Implement search functionality
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Search Tasks'),
+            content: TextField(
+              decoration: const InputDecoration(hintText: 'Enter task name...'),
+              onChanged: (query) {
+                // Implement search functionality
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

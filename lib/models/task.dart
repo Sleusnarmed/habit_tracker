@@ -4,37 +4,46 @@ import 'package:intl/intl.dart';
 part 'task.g.dart'; // Generated file
 
 enum TaskPriority { high, medium, low, none }
-enum TaskRepetition { never, daily, weekly, monthly, yearly, weekends, weekdays }
+
+enum TaskRepetition {
+  never,
+  daily,
+  weekly,
+  monthly,
+  yearly,
+  weekends,
+  weekdays,
+}
 
 @HiveType(typeId: 0)
 class Task {
   @HiveField(0)
   final String id;
-  
+
   @HiveField(1)
   final String title;
-  
+
   @HiveField(2)
   final String category;
-  
+
   @HiveField(3)
   bool isCompleted;
-  
+
   @HiveField(4)
   final String description;
-  
+
   @HiveField(5)
   final TaskPriority priority;
-  
+
   @HiveField(6)
   final DateTime? dueTime;
-  
+
   @HiveField(7)
   final Duration? duration;
-  
+
   @HiveField(8)
   final TaskRepetition repetition;
-  
+
   Task({
     required this.id,
     required this.title,
@@ -50,11 +59,13 @@ class Task {
     if (dueTime != null && duration != null) {
       final endTime = dueTime!.add(duration!);
       if (endTime.day != dueTime!.day) {
-        throw ArgumentError('Task duration cannot cross midnight to another day');
+        throw ArgumentError(
+          'Task duration cannot cross midnight to another day',
+        );
       }
     }
   }
-  
+
   Task copyWith({
     String? id,
     String? title,
@@ -78,27 +89,33 @@ class Task {
       repetition: repetition ?? this.repetition,
     );
   }
-  
+
   // Helper method to format time for display
   String? get formattedTime {
     if (dueTime == null) return null;
     return DateFormat.jm().format(dueTime!);
   }
-  
+
   // Helper method to format duration for display
   String? get formattedDuration {
     if (duration == null || dueTime == null) return null;
     final endTime = dueTime!.add(duration!);
     return '${DateFormat.jm().format(dueTime!)} - ${DateFormat.jm().format(endTime)}';
   }
-  
+
+  // Helper method to format date
+  String get formattedDueDate {
+    if (dueTime == null) return '';
+    return DateFormat('MMM d, h:mm a').format(dueTime!);
+  }
+
   // Helper method to check if task is due today
   bool get isDueToday {
     if (dueTime == null) return false;
     final now = DateTime.now();
-    return dueTime!.year == now.year && 
-           dueTime!.month == now.month && 
-           dueTime!.day == now.day;
+    return dueTime!.year == now.year &&
+        dueTime!.month == now.month &&
+        dueTime!.day == now.day;
   }
 }
 
