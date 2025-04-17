@@ -94,7 +94,7 @@ class _TaskListViewState extends State<TaskListView> {
       case OrderFilter.priority:
         tasks.sort((a, b) {
           if (a.priority.index != b.priority.index) {
-            return b.priority.index.compareTo(a.priority.index);
+            return a.priority.index.compareTo(b.priority.index);
           }
           return a.title.compareTo(b.title);
         });
