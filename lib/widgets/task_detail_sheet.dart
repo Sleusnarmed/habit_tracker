@@ -1,4 +1,3 @@
-// widgets/task_detail_sheet.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
@@ -25,6 +24,8 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   late Task _editedTask;
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
+  final _dateFormat = DateFormat('MMM d');
+  final _timeFormat = DateFormat('jm');
 
   @override
   void initState() {
@@ -41,20 +42,21 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     super.dispose();
   }
 
-  String _getDueDateText() {
+  String get _dueDateText {
     if (_editedTask.dueTime == null) return 'Add due date';
+
     final now = DateTime.now();
     final due = _editedTask.dueTime!;
-    
     final daysDiff = due.difference(now).inDays;
+
     String daysText = '';
     if (daysDiff > 0) {
       daysText = '$daysDiff ${daysDiff == 1 ? 'day' : 'days'} later, ';
     } else if (daysDiff < 0) {
       daysText = '${-daysDiff} ${daysDiff == -1 ? 'day' : 'days'} ago, ';
     }
-    
-    return '$daysText${DateFormat('MMM d').format(due)}${_editedTask.dueTime != null ? ', ${DateFormat('jm').format(due)}' : ''}';
+
+    return '$daysText${_dateFormat.format(due)}, ${_timeFormat.format(due)}';
   }
 
   Future<void> _selectDate() async {
@@ -64,59 +66,71 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
       firstDate: DateTime.now(),
       lastDate: DateTime(2100),
     );
-    if (picked != null) {
-      setState(() {
-        _editedTask = _editedTask.copyWith(
-          dueTime: DateTime(
-            picked.year,
-            picked.month,
-            picked.day,
-            _editedTask.dueTime?.hour ?? 0,
-            _editedTask.dueTime?.minute ?? 0,
-          ),
-        );
-      });
-    }
+
+    if (picked == null) return;
+
+    setState(() {
+      _editedTask = _editedTask.copyWith(
+        dueTime: DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          _editedTask.dueTime?.hour ?? 0,
+          _editedTask.dueTime?.minute ?? 0,
+        ),
+      );
+    });
   }
 
   Future<void> _selectTime() async {
+    final initialTime =
+        _editedTask.dueTime != null
+            ? TimeOfDay.fromDateTime(_editedTask.dueTime!)
+            : TimeOfDay.now();
+
     final picked = await showTimePicker(
       context: context,
-      initialTime: _editedTask.dueTime != null
-          ? TimeOfDay.fromDateTime(_editedTask.dueTime!)
-          : TimeOfDay.now(),
+      initialTime: initialTime,
     );
-    if (picked != null) {
-      setState(() {
-        _editedTask = _editedTask.copyWith(
-          dueTime: DateTime(
-            _editedTask.dueTime?.year ?? DateTime.now().year,
-            _editedTask.dueTime?.month ?? DateTime.now().month,
-            _editedTask.dueTime?.day ?? DateTime.now().day,
-            picked.hour,
-            picked.minute,
-          ),
-        );
-      });
-    }
-  }
 
-  void _changePriority() {
-    final priorities = TaskPriority.values;
-    final currentIndex = priorities.indexOf(_editedTask.priority);
-    final nextIndex = (currentIndex + 1) % priorities.length;
+    if (picked == null) return;
+
     setState(() {
-      _editedTask = _editedTask.copyWith(priority: priorities[nextIndex]);
+      _editedTask = _editedTask.copyWith(
+        dueTime: DateTime(
+          _editedTask.dueTime?.year ?? DateTime.now().year,
+          _editedTask.dueTime?.month ?? DateTime.now().month,
+          _editedTask.dueTime?.day ?? DateTime.now().day,
+          picked.hour,
+          picked.minute,
+        ),
+      );
     });
   }
 
-  void _changeRepetition() {
-    final repetitions = TaskRepetition.values;
-    final currentIndex = repetitions.indexOf(_editedTask.repetition);
-    final nextIndex = (currentIndex + 1) % repetitions.length;
-    setState(() {
-      _editedTask = _editedTask.copyWith(repetition: repetitions[nextIndex]);
-    });
+  void _cycleEnum<T>(List<T> values, T current, Function(T) update) {
+    final currentIndex = values.indexOf(current);
+    final nextIndex = (currentIndex + 1) % values.length;
+    update(values[nextIndex]);
+  }
+
+  void _saveChanges() {
+    widget.onSave(_editedTask);
+    Navigator.pop(context);
+  }
+
+  void _deleteTask() {
+    widget.onDelete();
+    Navigator.pop(context);
+  }
+
+  Color _getPriorityColor(TaskPriority priority) {
+    return switch (priority) {
+      TaskPriority.high => Colors.red,
+      TaskPriority.medium => Colors.orange,
+      TaskPriority.low => Colors.blue,
+      TaskPriority.none => Colors.grey,
+    };
   }
 
   @override
@@ -130,115 +144,128 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
-              DropdownButton<String>(
-                value: _editedTask.category,
-                items: widget.categories
-                    .where((c) => c != 'All')
-                    .map((category) => DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _editedTask = _editedTask.copyWith(category: value);
-                    });
-                  }
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete),
-                onPressed: () {
-                  widget.onDelete();
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
+          _buildHeaderRow(),
           const Divider(),
-          ListTile(
-            title: Text(_getDueDateText()),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.repeat,
-                    color: _editedTask.repetition != TaskRepetition.never
-                        ? Colors.blue
-                        : Colors.grey,
-                  ),
-                  onPressed: _changeRepetition,
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.flag,
-                    color: _getPriorityColor(_editedTask.priority),
-                  ),
-                  onPressed: _changePriority,
-                ),
-              ],
-            ),
-            onTap: _selectDate,
-          ),
-          TextField(
-            controller: _titleController,
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              hintText: 'Task title',
-            ),
-            style: Theme.of(context).textTheme.titleMedium,
-            onChanged: (value) {
-              setState(() {
-                _editedTask = _editedTask.copyWith(title: value);
-              });
-            },
-          ),
-          Expanded(
-            child: TextField(
-              controller: _descController,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: 'Add description...',
-              ),
-              maxLines: null,
-              onChanged: (value) {
-                setState(() {
-                  _editedTask = _editedTask.copyWith(description: value);
-                });
-              },
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              widget.onSave(_editedTask);
-              Navigator.pop(context);
-            },
-            child: const Text('Save Changes'),
-          ),
+          _buildDateAndPriorityRow(),
+          _buildTitleField(),
+          _buildDescriptionField(),
+          _buildSaveButton(),
         ],
       ),
     );
   }
 
-  Color _getPriorityColor(TaskPriority priority) {
-    switch (priority) {
-      case TaskPriority.high:
-        return Colors.red;
-      case TaskPriority.medium:
-        return Colors.orange;
-      case TaskPriority.low:
-        return Colors.blue;
-      case TaskPriority.none:
-        return Colors.grey;
-    }
+  Widget _buildHeaderRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+        _buildCategoryDropdown(),
+        IconButton(icon: const Icon(Icons.delete), onPressed: _deleteTask),
+      ],
+    );
+  }
+
+  Widget _buildCategoryDropdown() {
+    return DropdownButton<String>(
+      value: _editedTask.category,
+      items:
+          widget.categories
+              .where((c) => c != 'All')
+              .map(
+                (category) =>
+                    DropdownMenuItem(value: category, child: Text(category)),
+              )
+              .toList(),
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _editedTask = _editedTask.copyWith(category: value));
+        }
+      },
+    );
+  }
+
+  Widget _buildDateAndPriorityRow() {
+    return ListTile(
+      title: Text(_dueDateText),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: Icon(
+              Icons.repeat,
+              color:
+                  _editedTask.repetition != TaskRepetition.never
+                      ? Colors.blue
+                      : Colors.grey,
+            ),
+            onPressed:
+                () => _cycleEnum(
+                  TaskRepetition.values,
+                  _editedTask.repetition,
+                  (value) => setState(
+                    () => _editedTask = _editedTask.copyWith(repetition: value),
+                  ),
+                ), // Added missing parenthesis here
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.flag,
+              color: _getPriorityColor(_editedTask.priority),
+            ),
+            onPressed:
+                () => _cycleEnum(
+                  TaskPriority.values,
+                  _editedTask.priority,
+                  (value) => setState(
+                    () => _editedTask = _editedTask.copyWith(priority: value),
+                  ),
+                ), // Added missing parenthesis here
+          ),
+        ],
+      ),
+      onTap: _selectDate,
+    );
+  }
+
+  Widget _buildTitleField() {
+    return TextField(
+      controller: _titleController,
+      decoration: const InputDecoration(
+        border: InputBorder.none,
+        hintText: 'Task title',
+      ),
+      style: Theme.of(context).textTheme.titleMedium,
+      onChanged:
+          (value) =>
+              setState(() => _editedTask = _editedTask.copyWith(title: value)),
+    );
+  }
+
+  Widget _buildDescriptionField() {
+    return Expanded(
+      child: TextField(
+        controller: _descController,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Add description...',
+        ),
+        maxLines: null,
+        onChanged:
+            (value) => setState(
+              () => _editedTask = _editedTask.copyWith(description: value),
+            ),
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return ElevatedButton(
+      onPressed: _saveChanges,
+      child: const Text('Save Changes'),
+    );
   }
 }
