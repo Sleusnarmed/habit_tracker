@@ -22,6 +22,7 @@ class _TaskListViewState extends State<TaskListView> {
   final TextEditingController _categoryController = TextEditingController();
   GroupFilter _groupFilter = GroupFilter.none;
   OrderFilter _orderFilter = OrderFilter.date;
+  bool _showCompletedTasks = true;
 
   @override
   void dispose() {
@@ -42,16 +43,19 @@ class _TaskListViewState extends State<TaskListView> {
             itemBuilder:
                 (context) => [
                   const PopupMenuItem(value: 'filter', child: Text('Filter')),
-                  const PopupMenuItem(
-                    value: 'hide_completed',
-                    child: Text('Hide Completed'),
+                  PopupMenuItem(
+                    value: 'toggle_completed',
+                    child: Text(
+                      _showCompletedTasks ? 'Hide Completed' : 'Show Completed',
+                    ),
                   ),
                 ],
             onSelected: (value) {
               if (value == 'filter') {
                 _showFilterDialog();
+              } else if (value == 'toggle_completed') {
+                setState(() => _showCompletedTasks = !_showCompletedTasks);
               }
-              // We'll implement hide completed later
             },
           ),
         ],
@@ -70,6 +74,11 @@ class _TaskListViewState extends State<TaskListView> {
 
   List<Task> _getFilteredAndOrderedTasks(TaskProvider taskProvider) {
     List<Task> tasks = taskProvider.getTasksByCategory(_currentCategory);
+
+    if (!_showCompletedTasks) {
+      tasks = tasks.where((task) => !task.isCompleted).toList();
+    }
+
     tasks = _applyOrdering(tasks);
     return tasks;
   }
