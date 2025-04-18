@@ -15,6 +15,7 @@ class MainNavigationWrapper extends StatefulWidget {
 class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
   int _currentIndex = 0;
   final PageController _pageController = PageController(initialPage: 0);
+  final List<double> _iconScales = [1.05, 1.05, 1.05, 1.05, 1.05]; // Scale factors for each icon
 
   final List<Widget> _pages = const [
     TaskListView(),
@@ -30,12 +31,25 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     super.dispose();
   }
 
+  // Icons animation when tapped 
+  void _animateIcon(int index) {
+    setState(() {
+      _iconScales[index] = 0.8; 
+    });
+
+    Future.delayed(const Duration(milliseconds: 100), () {
+      setState(() {
+        _iconScales[index] = 1.0; 
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: PageView(
         controller: _pageController,
-        physics: const ClampingScrollPhysics(),
+        physics: const NeverScrollableScrollPhysics(),
         onPageChanged: (index) {
           setState(() => _currentIndex = index);
         },
@@ -48,19 +62,41 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
   BottomNavigationBar _buildBottomNavBar() {
     return BottomNavigationBar(
       currentIndex: _currentIndex,
-      onTap: (index) => _pageController.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      ),
+      onTap: (index) {
+        _animateIcon(index);
+        setState(() => _currentIndex = index);
+        _pageController.jumpToPage(index);
+      },
       type: BottomNavigationBarType.fixed,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Tasks'),
-        BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: 'Calendar'),
-        BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Matrix'),
-        BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'Habits'),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Account'),
+      showSelectedLabels: false,
+      showUnselectedLabels: false,
+      selectedIconTheme: IconThemeData(
+        size: 28.0, 
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      unselectedIconTheme: IconThemeData(
+        size: 26.0, 
+        color: Colors.grey[600],
+      ),
+      items: [
+        _buildAnimatedIcon(0, Icons.check_box_rounded),
+        _buildAnimatedIcon(1, Icons.calendar_month),
+        _buildAnimatedIcon(2, Icons.grid_view_rounded),
+        _buildAnimatedIcon(3, Icons.track_changes),
+        _buildAnimatedIcon(4, Icons.settings_sharp),
       ],
+    );
+  }
+
+  // Animation 
+  BottomNavigationBarItem _buildAnimatedIcon(int index, IconData icon) {
+    return BottomNavigationBarItem(
+      icon: AnimatedScale(
+        scale: _iconScales[index],
+        duration: const Duration(milliseconds: 100),
+        child: Icon(icon),
+      ),
+      label: '',
     );
   }
 }
