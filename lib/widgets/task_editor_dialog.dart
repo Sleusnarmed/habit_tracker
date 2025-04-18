@@ -1,5 +1,6 @@
 // widgets/task_editor_dialog.dart
 import 'package:flutter/material.dart';
+import 'package:habit_tracker/widgets/advanced_date_picker.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
 
@@ -79,74 +80,21 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     return endDateTime.difference(startDateTime);
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final picked = await showDatePicker(
+  void _showAdvancedDatePicker(BuildContext context) {
+    showModalBottomSheet(
       context: context,
-      initialDate: _dueDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2100),
+      isScrollControlled: true,
+      builder:
+          (context) => AdvancedDatePicker(
+            initialDate: _dueDate,
+            initialStartTime: _startTime,
+            initialEndTime: _endTime,
+            onDateSelected: (date) => setState(() => _dueDate = date),
+            onStartTimeSelected: (time) => setState(() => _startTime = time),
+            onEndTimeSelected: (time) => setState(() => _endTime = time),
+            onSave: () => Navigator.pop(context),
+          ),
     );
-    if (picked != null) {
-      setState(() => _dueDate = picked);
-    }
-  }
-
-  Future<void> _selectStartTime(BuildContext context) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _startTime ?? TimeOfDay.now(),
-    );
-    if (picked != null) {
-      setState(() {
-        _startTime = picked;
-        // Reset end time if it's now before start time
-        if (_endTime != null && _isTimeBefore(_endTime!, picked)) {
-          _endTime = null;
-        }
-      });
-    }
-  }
-
-  Future<void> _selectEndTime(BuildContext context) async {
-    if (_startTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select start time first')),
-      );
-      return;
-    }
-
-    // Calculate initial end time safely
-    TimeOfDay initialEndTime;
-    try {
-      initialEndTime =
-          _endTime ??
-          _startTime!.replacing(
-            minute: (_startTime!.minute + 30) % 60,
-            hour: _startTime!.hour + ((_startTime!.minute + 30) ~/ 60),
-          );
-    } catch (e) {
-      initialEndTime = _startTime!.replacing(hour: _startTime!.hour + 1);
-    }
-
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initialEndTime,
-    );
-
-    if (picked != null) {
-      if (_isTimeBefore(picked, _startTime!)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('End time must be after start time')),
-        );
-        return;
-      }
-
-      setState(() => _endTime = picked);
-    }
-  }
-
-  bool _isTimeBefore(TimeOfDay a, TimeOfDay b) {
-    return a.hour < b.hour || (a.hour == b.hour && a.minute < b.minute);
   }
 
   Task _buildTask() {
@@ -195,26 +143,10 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       children: [
         Row(
           children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _selectStartTime(context),
-                child: Text(
-                  _startTime == null
-                      ? 'Select Start Time'
-                      : _startTime!.format(context),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _selectEndTime(context),
-                child: Text(
-                  _endTime == null
-                      ? 'Select End Time'
-                      : _endTime!.format(context),
-                ),
-              ),
+            // Changed from 'child' to 'children'
+            OutlinedButton(
+              onPressed: () => _showAdvancedDatePicker(context),
+              child: Text(_getDateAndTimeText()),
             ),
           ],
         ),
@@ -288,20 +220,6 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
               decoration: const InputDecoration(labelText: 'Priority'),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _selectDate(context),
-                    child: Text(
-                      _dueDate == null
-                          ? 'Select Date'
-                          : DateFormat.yMMMd().format(_dueDate!),
-                    ),
-                  ),
-                ),
-              ],
-            ),
             const SizedBox(height: 16),
             _buildTimeRangeSection(),
             const SizedBox(height: 16),
@@ -364,6 +282,13 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
 
   String _getPriorityText(TaskPriority priority) {
     return priority.toString().split('.').last.capitalize();
+  }
+
+  String _getDateAndTimeText() {
+    if (_dueDate == null) return 'Select Date & Time';
+    final dateText = DateFormat('MMM d').format(_dueDate!);
+    if (_startTime == null) return dateText;
+    return '$dateText, ${_startTime!.format(context)} - ${_endTime?.format(context)}';
   }
 
   String _getRepetitionText(TaskRepetition repeat) {
