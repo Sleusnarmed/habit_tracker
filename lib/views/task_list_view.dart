@@ -285,8 +285,9 @@ class _TaskListViewState extends State<TaskListView> {
   }
 
   Future<void> _showAddTaskDialog(TaskProvider taskProvider) async {
-    final task = await showDialog<Task>(
+    final task = await showModalBottomSheet<Task>(
       context: context,
+      isScrollControlled: true,
       builder:
           (context) => TaskEditorDialog(
             initialCategory:

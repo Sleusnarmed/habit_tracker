@@ -1,7 +1,5 @@
-// widgets/task_editor_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:habit_tracker/widgets/advanced_date_picker.dart';
-import 'package:intl/intl.dart';
 import '../models/task.dart';
 
 class TaskEditorDialog extends StatefulWidget {
@@ -33,6 +31,10 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   @override
   void initState() {
     super.initState();
+    _initializeFromTask();
+  }
+
+  void _initializeFromTask() {
     final task = widget.initialTask;
     _titleController = TextEditingController(text: task?.title ?? '');
     _descController = TextEditingController(text: task?.description ?? '');
@@ -40,8 +42,10 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     _priority = task?.priority ?? TaskPriority.none;
     _dueDate = task?.dueTime;
     _repetition = task?.repetition ?? TaskRepetition.never;
+    _initializeTimeFields(task);
+  }
 
-    // Initialize time range from existing task
+  void _initializeTimeFields(Task? task) {
     if (task?.dueTime != null) {
       _startTime = TimeOfDay.fromDateTime(task!.dueTime!);
       if (task.duration != null) {
@@ -49,7 +53,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         _endTime = TimeOfDay.fromDateTime(endTime);
       }
     } else {
-      _startTime = null; // Explicitly set to null for new tasks
+      _startTime = null;
       _endTime = null;
     }
   }
@@ -89,8 +93,8 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       isScrollControlled: true,
       builder:
           (context) => AdvancedDatePicker(
-            initialDate: _dueDate ?? DateTime.now(), // today is the default
-            initialTime: _startTime, // Can be null
+            initialDate: _dueDate ?? DateTime.now(),
+            initialTime: _startTime,
             initialRepetition: _repetition,
             onDateSelected: (date) => setState(() => _dueDate = date),
             onTimeSelected: (time) => setState(() => _startTime = time),
@@ -112,6 +116,80 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     );
   }
 
+  void _showPriorityPicker(BuildContext context) {
+    final buttonContext = context.findRenderObject() as RenderBox;
+    final buttonPosition = buttonContext.localToGlobal(Offset.zero);
+    final buttonSize = buttonContext.size;
+
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        buttonPosition.dx + 65,
+        buttonPosition.dy - 100,
+        buttonPosition.dx + buttonSize.width,
+        buttonPosition.dy + buttonSize.height,
+      ),
+      items: TaskPriority.values.map(_buildPriorityMenuItem).toList(),
+    );
+  }
+
+  PopupMenuItem<TaskPriority> _buildPriorityMenuItem(TaskPriority priority) {
+    final priorityData = _getPriorityData(priority);
+    return PopupMenuItem(
+      onTap: () => setState(() => _priority = priority),
+      child: Row(
+        children: [
+          Icon(Icons.flag, color: priorityData.color),
+          const SizedBox(width: 8),
+          Text(priorityData.label),
+          if (_priority == priority) ...[
+            const Spacer(),
+            Icon(Icons.check, color: Theme.of(context).primaryColor),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showCategoryPicker(BuildContext context) {
+    final buttonContext = context.findRenderObject() as RenderBox;
+    final buttonPosition = buttonContext.localToGlobal(Offset.zero);
+    final buttonSize = buttonContext.size;
+
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        buttonPosition.dx + 125,
+        buttonPosition.dy - 50,
+        buttonPosition.dx + buttonSize.width,
+        buttonPosition.dy + buttonSize.height,
+      ),
+      items: _buildCategoryMenuItems(),
+    );
+  }
+
+  List<PopupMenuItem<String>> _buildCategoryMenuItems() {
+    final theme = Theme.of(context);
+    return widget.categories
+        .where((c) => c != 'All')
+        .map(
+          (category) => PopupMenuItem<String>(
+            value: category,
+            onTap: () => setState(() => _category = category),
+            child: Row(
+              children: [
+                Text(category),
+                if (_category == category) ...[
+                  const Spacer(),
+                  Icon(Icons.check, color: theme.primaryColor),
+                ],
+              ],
+            ),
+          ),
+        )
+        .toList();
+  }
+
   void _saveTask() {
     if (_titleController.text.isEmpty) {
       ScaffoldMessenger.of(
@@ -119,6 +197,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       ).showSnackBar(const SnackBar(content: Text('Title is required')));
       return;
     }
+
     try {
       Navigator.pop(context, _buildTask());
     } on ArgumentError catch (e) {
@@ -129,31 +208,8 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   }
 
   Task _buildTask() {
-    DateTime? dueTime;
-    if (_dueDate != null && _startTime != null) {
-      dueTime = DateTime(
-        _dueDate!.year,
-        _dueDate!.month,
-        _dueDate!.day,
-        _startTime!.hour,
-        _startTime!.minute,
-      );
-
-      // Validate duration doesn't cross midnight
-      if (_endTime != null) {
-        final endDateTime = DateTime(
-          _dueDate!.year,
-          _dueDate!.month,
-          _dueDate!.day,
-          _endTime!.hour,
-          _endTime!.minute,
-        );
-
-        if (endDateTime.day != dueTime.day) {
-          throw ArgumentError('Duration cannot cross midnight');
-        }
-      }
-    }
+    final dueTime = _calculateDueTime();
+    _validateTimeRange(dueTime);
 
     return Task(
       id:
@@ -169,129 +225,160 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     );
   }
 
-  Widget _buildTimeRangeSection() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            // Changed from 'child' to 'children'
-            OutlinedButton(
-              onPressed: () => _showAdvancedDatePicker(context),
-              child: Text(_getDateAndTimeText()),
-            ),
-          ],
-        ),
-        if (_startTime != null && _endTime != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Time Range: ${_startTime!.format(context)} - ${_endTime!.format(context)}',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
-      ],
+  DateTime? _calculateDueTime() {
+    if (_dueDate == null || _startTime == null) return null;
+
+    return DateTime(
+      _dueDate!.year,
+      _dueDate!.month,
+      _dueDate!.day,
+      _startTime!.hour,
+      _startTime!.minute,
     );
+  }
+
+  void _validateTimeRange(DateTime? dueTime) {
+    if (dueTime != null && _endTime != null) {
+      final endDateTime = DateTime(
+        _dueDate!.year,
+        _dueDate!.month,
+        _dueDate!.day,
+        _endTime!.hour,
+        _endTime!.minute,
+      );
+
+      if (endDateTime.day != dueTime.day) {
+        throw ArgumentError('Duration cannot cross midnight');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.initialTask == null ? 'Add New Task' : 'Edit Task'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Title*'),
-              autofocus: true,
-            ),
-            TextField(
-              controller: _descController,
-              decoration: const InputDecoration(labelText: 'Description'),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _category,
-              items:
-                  widget.categories
-                      .where((c) => c != 'All')
-                      .map(
-                        (category) => DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        ),
-                      )
-                      .toList(),
-              onChanged: (value) => setState(() => _category = value!),
-              decoration: const InputDecoration(labelText: 'Category'),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<TaskPriority>(
-              value: _priority,
-              items:
-                  TaskPriority.values
-                      .map(
-                        (priority) => DropdownMenuItem(
-                          value: priority,
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.flag,
-                                color: _getPriorityColor(priority),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(_getPriorityText(priority)),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-              onChanged: (value) => setState(() => _priority = value!),
-              decoration: const InputDecoration(labelText: 'Priority'),
-            ),
-            const SizedBox(height: 16),
-            _buildTimeRangeSection(),
-          ],
-        ),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.25,
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+      decoration: BoxDecoration(
+        color: Theme.of(context).dialogBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTitleField(),
+          _buildDescriptionField(),
+          _buildActionRow(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitleField() {
+    return TextField(
+      controller: _titleController,
+      decoration: InputDecoration(
+        border: InputBorder.none,
+        hintText: 'What do you need to do?',
+        hintStyle: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+      ),
+      style: Theme.of(context).textTheme.titleMedium,
+      autofocus: true,
+    );
+  }
+
+  Widget _buildDescriptionField() {
+    return Expanded(
+      child: TextField(
+        controller: _descController,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: 'Description...',
+          hintStyle: TextStyle(color: Colors.grey[600]),
         ),
-        ElevatedButton(onPressed: _saveTask, child: const Text('Save')),
+        maxLines: null,
+        keyboardType: TextInputType.multiline,
+      ),
+    );
+  }
+
+  Widget _buildActionRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [_buildActionButtons(), _buildSaveButton()],
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Row(
+      children: [
+        _buildIconButton(
+          icon: Icons.calendar_today,
+          onPressed: () => _showAdvancedDatePicker(context),
+        ),
+        _buildIconButton(
+          icon: Icons.flag,
+          color: _getPriorityColor(_priority),
+          onPressed: () => _showPriorityPicker(context),
+        ),
+        _buildIconButton(
+          icon: Icons.arrow_forward,
+          onPressed: () => _showCategoryPicker(context),
+        ),
       ],
     );
   }
 
+  Widget _buildIconButton({
+    required IconData icon,
+    Color? color,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(icon, size: 24, color: color),
+      onPressed: onPressed,
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return FloatingActionButton(
+      mini: true,
+      elevation: 0,
+      backgroundColor: Theme.of(context).primaryColor,
+      child: const Icon(Icons.send, color: Colors.white),
+      onPressed: _saveTask,
+    );
+  }
+
   Color _getPriorityColor(TaskPriority priority) {
+    return _getPriorityData(priority).color;
+  }
+
+  _PriorityData _getPriorityData(TaskPriority priority) {
     switch (priority) {
       case TaskPriority.high:
-        return Colors.red;
+        return _PriorityData(Colors.red, 'High');
       case TaskPriority.medium:
-        return Colors.orange;
+        return _PriorityData(Colors.orange, 'Medium');
       case TaskPriority.low:
-        return Colors.blue;
+        return _PriorityData(Colors.blue, 'Low');
       case TaskPriority.none:
-        return Colors.grey;
+        return _PriorityData(Colors.grey, 'None');
     }
   }
+}
 
-  String _getPriorityText(TaskPriority priority) {
-    return priority.toString().split('.').last.capitalize();
-  }
+class _PriorityData {
+  final Color color;
+  final String label;
 
-  String _getDateAndTimeText() {
-    if (_dueDate == null) return 'Select Date & Time';
-    final dateText = DateFormat('MMM d').format(_dueDate!);
-    if (_startTime == null) return dateText;
-    return '$dateText, ${_startTime!.format(context)} - ${_endTime?.format(context)}';
-  }
-
-  String _getRepetitionText(TaskRepetition repeat) {
-    return repeat.toString().split('.').last.capitalize();
-  }
+  _PriorityData(this.color, this.label);
 }
 
 extension StringExtension on String {
