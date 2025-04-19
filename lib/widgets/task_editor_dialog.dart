@@ -96,13 +96,64 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
             initialDate: _dueDate ?? DateTime.now(),
             initialTime: _startTime,
             initialRepetition: _repetition,
-            onDateSelected: (date) => setState(() => _dueDate = date),
-            onTimeSelected: (time) => setState(() => _startTime = time),
+            onDateSelected: (date) {
+              setState(() {
+                _dueDate = date;
+                // Update time from the full DateTime
+                _startTime = TimeOfDay.fromDateTime(date);
+              });
+            },
+            onTimeSelected: (time) {
+              setState(() {
+                _startTime = time;
+                // Update date with the new time
+                if (_dueDate != null) {
+                  _dueDate = DateTime(
+                    _dueDate!.year,
+                    _dueDate!.month,
+                    _dueDate!.day,
+                    time.hour,
+                    time.minute,
+                  );
+                } else {
+                  // If no date selected yet, use today's date with the selected time
+                  final now = DateTime.now();
+                  _dueDate = DateTime(
+                    now.year,
+                    now.month,
+                    now.day,
+                    time.hour,
+                    time.minute,
+                  );
+                }
+              });
+            },
             onRepetitionChanged:
                 (repeat) => setState(() => _repetition = repeat),
             onSave: () {
               if (_dueDate == null) {
-                setState(() => _dueDate = DateTime.now());
+                // If no date was selected, use today's date with current or default time
+                final now = DateTime.now();
+                final time = _startTime ?? const TimeOfDay(hour: 12, minute: 0);
+                setState(() {
+                  _dueDate = DateTime(
+                    now.year,
+                    now.month,
+                    now.day,
+                    time.hour,
+                    time.minute,
+                  );
+                  _startTime = time;
+                });
+              } else if (_startTime == null) {
+                // If date exists but no time, don't save (show error)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please select a time'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                return;
               }
               Navigator.pop(context);
             },
@@ -199,16 +250,31 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     }
 
     try {
-      Navigator.pop(context, _buildTask());
+      // This will throw if date/time is invalid
+      final task = _buildTask();
+      Navigator.pop(context, task);
     } on ArgumentError catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Invalid time range')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? 'Invalid date/time')));
     }
   }
 
   Task _buildTask() {
-    final dueTime = _calculateDueTime();
+    // Ensure we have both date and time
+    if (_dueDate == null || _startTime == null) {
+      throw ArgumentError('Both date and time must be selected');
+    }
+
+    // Create the final dueTime with both components
+    final dueTime = DateTime(
+      _dueDate!.year,
+      _dueDate!.month,
+      _dueDate!.day,
+      _startTime!.hour,
+      _startTime!.minute,
+    );
+
     _validateTimeRange(dueTime);
 
     return Task(
