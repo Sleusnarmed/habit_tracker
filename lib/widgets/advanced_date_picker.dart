@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
 import '../models/task.dart';
-// this took me all day to do.... 
+
 class AdvancedDatePicker extends StatefulWidget {
   final DateTime? initialDate;
   final TimeOfDay? initialTime;
@@ -33,6 +34,8 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   late TimeOfDay? _selectedTime;
   late TaskRepetition _selectedRepetition;
   bool _showDurationView = false;
+  late TimeOfDay _startTime;
+  late TimeOfDay _endTime;
 
   @override
   void initState() {
@@ -40,6 +43,9 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     _selectedDate = widget.initialDate ?? DateTime.now();
     _selectedTime = widget.initialTime;
     _selectedRepetition = widget.initialRepetition;
+    final now = TimeOfDay.now();
+    _startTime = now;
+    _endTime = TimeOfDay(hour: now.hour + 1, minute: now.minute);
   }
 
   @override
@@ -47,7 +53,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Container(
-      height: screenHeight * 0.9, // 90% of screen height
+      height: screenHeight * 0.9,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
@@ -55,7 +61,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
       ),
       child: Column(
         children: [
-          // Header (10% of container height)
+          // Header (fixed height)
           SizedBox(
             height: screenHeight * 0.9 * 0.1,
             child: Row(
@@ -109,99 +115,201 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
               ],
             ),
           ),
-          if (_showDurationView)
-            const Center(child: Text('Hello')) // Duration view placeholder
-          else
-            Column(
+
+          // Main content area (flexible)
+          Expanded(
+            child: _showDurationView ? _buildDurationView() : _buildDateView(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateView() {
+    return Column(
+      children: [
+        // Quick options row
+        SizedBox(
+          height: 60,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                SizedBox(
-                  height: screenHeight * 0.9 * 0.1,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 8),
-                        _buildQuickOption(
-                          Icons.today,
-                          'Today',
-                          () => _selectDate(DateTime.now()),
-                        ),
-                        const SizedBox(width: 16),
-                        _buildQuickOption(
-                          Icons.event_available,
-                          'Tomorrow',
-                          () => _selectDate(
-                            DateTime.now().add(const Duration(days: 1)),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        _buildQuickOption(
-                          Icons.calendar_view_week,
-                          'Next Monday',
-                          () => _selectNextWeekday(DateTime.monday),
-                        ),
-                        const SizedBox(width: 16),
-                        _buildQuickOption(
-                          Icons.wb_sunny,
-                          'Afternoon',
-                          () => _selectTime(TimeOfDay(hour: 17, minute: 0)),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                    ),
-                  ),
+                const SizedBox(width: 8),
+                _buildQuickOption(
+                  Icons.today,
+                  'Today',
+                  () => _selectDate(DateTime.now()),
                 ),
+                const SizedBox(width: 16),
+                _buildQuickOption(
+                  Icons.event_available,
+                  'Tomorrow',
+                  () =>
+                      _selectDate(DateTime.now().add(const Duration(days: 1))),
+                ),
+                const SizedBox(width: 16),
+                _buildQuickOption(
+                  Icons.calendar_view_week,
+                  'Next Monday',
+                  () => _selectNextWeekday(DateTime.monday),
+                ),
+                const SizedBox(width: 16),
+                _buildQuickOption(
+                  Icons.wb_sunny,
+                  'Afternoon',
+                  () => _selectTime(TimeOfDay(hour: 17, minute: 0)),
+                ),
+                const SizedBox(width: 8),
               ],
             ),
+          ),
+        ),
 
-          // Calendar with fixed height
-          SizedBox(
-            height: screenHeight * 0.9 * 0.5,
-            child: TableCalendar(
-              shouldFillViewport:
-                  true, // IF I DONT PUT THIS, MAKES 'OVERFLOW' THANK YOU stackoverflow
-              firstDay: DateTime.now(),
-              lastDay: DateTime.now().add(const Duration(days: 365)),
-              focusedDay: _selectedDate,
-              selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
-              onDaySelected: (selectedDay, focusedDay) {
-                setState(() => _selectedDate = selectedDay);
-                widget.onDateSelected?.call(selectedDay);
-              },
-              calendarStyle: CalendarStyle(
-                selectedDecoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  shape: BoxShape.circle,
-                ),
-                todayDecoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.5),
-                  shape: BoxShape.circle,
-                ),
+        // Calendar with fixed height
+        SizedBox(
+          height: 300,
+          child: TableCalendar(
+            shouldFillViewport: true,
+            firstDay: DateTime.now(),
+            lastDay: DateTime.now().add(const Duration(days: 365)),
+            focusedDay: _selectedDate,
+            selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
+            onDaySelected: (selectedDay, focusedDay) {
+              setState(() => _selectedDate = selectedDay);
+              widget.onDateSelected?.call(selectedDay);
+            },
+            calendarStyle: CalendarStyle(
+              selectedDecoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                shape: BoxShape.circle,
               ),
-              headerStyle: HeaderStyle(
-                formatButtonVisible: false,
-                titleCentered: true,
-                leftChevronMargin: EdgeInsets.zero,
-                rightChevronMargin: EdgeInsets.zero,
+              todayDecoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.5),
+                shape: BoxShape.circle,
               ),
             ),
-          ),
-
-          // Time selection options
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildTimeOption(context),
-                  const SizedBox(height: 1),
-                  _buildReminderOption(context),
-                  const SizedBox(height: 1),
-                  _buildRepetitionOption(context),
-                  const SizedBox(height: 1),
-                ],
-              ),
+            headerStyle: HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              leftChevronMargin: EdgeInsets.zero,
+              rightChevronMargin: EdgeInsets.zero,
             ),
           ),
+        ),
+
+        // Time selection options (flexible)
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildTimeOption(context),
+                const SizedBox(height: 1),
+                _buildReminderOption(context),
+                const SizedBox(height: 1),
+                _buildRepetitionOption(context),
+                const SizedBox(height: 1),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDurationView() {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              // Date card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Date',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        DateFormat('EEEE, MMM d').format(_selectedDate),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        DateFormat('y').format(_selectedDate),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Duration card
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hour',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () => _showDurationPicker(context),
+                        child: Text(
+                          '${_startTime.format(context)} - ${_endTime.format(context)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _calculateDurationText(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildReminderOption(context),
+          const SizedBox(height: 1),
+          _buildRepetitionOption(context),
         ],
       ),
     );
@@ -298,6 +406,91 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     );
   }
 
+  String _calculateDurationText() {
+    final start = DateTime(2023, 1, 1, _startTime.hour, _startTime.minute);
+    final end = DateTime(2023, 1, 1, _endTime.hour, _endTime.minute);
+    final difference = end.difference(start);
+
+    if (difference.inMinutes == 0) return 'Duration: 0 minutes';
+
+    final hours = difference.inHours;
+    final minutes = difference.inMinutes % 60;
+
+    if (hours == 0) {
+      return 'Duration: $minutes minutes';
+    } else if (minutes == 0) {
+      return 'Duration: $hours ${hours == 1 ? 'hour' : 'hours'}';
+    } else {
+      return 'Duration: $hours ${hours == 1 ? 'hour' : 'hours'} $minutes minutes';
+    }
+  }
+
+  Future<void> _showDurationPicker(BuildContext context) async {
+    final initialStartTime = _startTime;
+    final initialEndTime = _endTime;
+
+    final pickedTimes = await showDialog<List<TimeOfDay>>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Select Duration'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Start Time'),
+                trailing: Text(initialStartTime.format(context)),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: initialStartTime,
+                  );
+                  if (picked != null && mounted) {
+                    Navigator.pop(context, [picked, initialEndTime]);
+                  }
+                },
+              ),
+              ListTile(
+                title: const Text('End Time'),
+                trailing: Text(initialEndTime.format(context)),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: initialEndTime,
+                  );
+                  if (picked != null && mounted) {
+                    Navigator.pop(context, [initialStartTime, picked]);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed:
+                  () => Navigator.pop(context, [
+                    initialStartTime,
+                    initialEndTime,
+                  ]),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (pickedTimes != null && pickedTimes.length == 2) {
+      setState(() {
+        _startTime = pickedTimes[0];
+        _endTime = pickedTimes[1];
+      });
+    }
+  }
+
   String _getRepetitionText(TaskRepetition repeat) {
     switch (repeat) {
       case TaskRepetition.daily:
@@ -342,8 +535,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   }
 
   Future<void> _showTimePicker(BuildContext context) async {
-    final initialTime =
-        _selectedTime ?? TimeOfDay.now(); // Providing a default
+    final initialTime = _selectedTime ?? TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
       initialTime: initialTime,
