@@ -48,6 +48,9 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
         final endTime = task.dueTime!.add(task.duration!);
         _endTime = TimeOfDay.fromDateTime(endTime);
       }
+    } else {
+      _startTime = null; // Explicitly set to null for new tasks
+      _endTime = null;
     }
   }
 
@@ -86,15 +89,43 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       isScrollControlled: true,
       builder:
           (context) => AdvancedDatePicker(
-            initialDate: _dueDate,
-            initialStartTime: _startTime,
-            initialEndTime: _endTime,
+            initialDate: _dueDate ?? DateTime.now(), // today is the default
+            initialTime: _startTime, // Can be null
+            initialRepetition: _repetition,
             onDateSelected: (date) => setState(() => _dueDate = date),
-            onStartTimeSelected: (time) => setState(() => _startTime = time),
-            onEndTimeSelected: (time) => setState(() => _endTime = time),
-            onSave: () => Navigator.pop(context),
+            onTimeSelected: (time) => setState(() => _startTime = time),
+            onRepetitionChanged:
+                (repeat) => setState(() => _repetition = repeat),
+            onSave: () {
+              if (_dueDate == null) {
+                setState(() => _dueDate = DateTime.now());
+              }
+              Navigator.pop(context);
+            },
+            onCancel: () {
+              if (_dueDate == null && widget.initialTask == null) {
+                setState(() => _dueDate = null);
+              }
+              Navigator.pop(context);
+            },
           ),
     );
+  }
+
+  void _saveTask() {
+    if (_titleController.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Title is required')));
+      return;
+    }
+    try {
+      Navigator.pop(context, _buildTask());
+    } on ArgumentError catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Invalid time range')),
+      );
+    }
   }
 
   Task _buildTask() {
@@ -220,23 +251,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
               decoration: const InputDecoration(labelText: 'Priority'),
             ),
             const SizedBox(height: 16),
-            const SizedBox(height: 16),
             _buildTimeRangeSection(),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<TaskRepetition>(
-              value: _repetition,
-              items:
-                  TaskRepetition.values
-                      .map(
-                        (repeat) => DropdownMenuItem(
-                          value: repeat,
-                          child: Text(_getRepetitionText(repeat)),
-                        ),
-                      )
-                      .toList(),
-              onChanged: (value) => setState(() => _repetition = value!),
-              decoration: const InputDecoration(labelText: 'Repeat'),
-            ),
           ],
         ),
       ),
@@ -245,24 +260,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
-          onPressed: () {
-            if (_titleController.text.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Title is required')),
-              );
-              return;
-            }
-            try {
-              Navigator.pop(context, _buildTask());
-            } on ArgumentError catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(e.message ?? 'Invalid time range')),
-              );
-            }
-          },
-          child: const Text('Save'),
-        ),
+        ElevatedButton(onPressed: _saveTask, child: const Text('Save')),
       ],
     );
   }

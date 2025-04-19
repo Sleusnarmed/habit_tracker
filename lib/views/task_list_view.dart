@@ -404,9 +404,6 @@ class _TaskListViewState extends State<TaskListView> {
   }
 }
 
-// ... [Keep all your extracted widgets like TaskTile, TaskCheckbox, etc.]
-// Extracted Widgets
-
 class TaskTile extends StatelessWidget {
   final Task task;
   final TaskProvider taskProvider;
