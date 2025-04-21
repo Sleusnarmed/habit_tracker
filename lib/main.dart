@@ -5,27 +5,14 @@ import 'package:habit_tracker/providers/task_provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
-
-// sheeesh
-import 'package:habit_tracker/views/task_list_view.dart';
-import 'package:habit_tracker/views/calendar_view.dart';
-import 'package:habit_tracker/views/matrix_view.dart';
-import 'package:habit_tracker/views/habits_view.dart';
-
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
 
-  // Register adapters
-  Hive.registerAdapter(TaskAdapter());
-  Hive.registerAdapter(TaskPriorityAdapter());
-  Hive.registerAdapter(TaskRepetitionAdapter());
-   Hive.registerAdapter(DurationAdapter()); 
+  Task.registerAdapters();
 
-  // Open boxes 
-  final Box<Task> tasksBox = await Hive.openBox<Task>('tasks'); // For tasks
-  await Hive.openBox<List<String>>('categories_box'); // For Categories
+  final tasksBox = await Hive.openBox<Task>('tasks');
+  await Hive.openBox<List<String>>('categories_box');
 
   runApp(
     ChangeNotifierProvider(
@@ -34,6 +21,7 @@ void main() async {
     ),
   );
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -46,4 +34,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-

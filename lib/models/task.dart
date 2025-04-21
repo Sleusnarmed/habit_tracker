@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/material.dart';
 
 part 'task.g.dart'; // Generated file
 
@@ -36,12 +37,15 @@ class Task {
   final TaskPriority priority;
 
   @HiveField(6)
-  final DateTime? dueTime;
+  final DateTime? dueDate;
 
   @HiveField(7)
-  final Duration? duration;
+  final TimeOfDay? dueTime;
 
   @HiveField(8)
+  final Duration? duration;
+
+  @HiveField(9)
   final TaskRepetition repetition;
 
   Task({
@@ -51,17 +55,15 @@ class Task {
     this.isCompleted = false,
     this.description = '',
     this.priority = TaskPriority.none,
+    this.dueDate,
     this.dueTime,
     this.duration,
     this.repetition = TaskRepetition.never,
   }) {
-    // Validate that duration doesn't cross midnight if dueTime is set
-    if (dueTime != null && duration != null) {
-      final endTime = dueTime!.add(duration!);
-      if (endTime.day != dueTime!.day) {
-        throw ArgumentError(
-          'Task duration cannot cross midnight to another day',
-        );
+    if (dueDate != null && dueTime != null && duration != null) {
+      final endTime = dueDateTime!.add(duration!);
+      if (endTime.day != dueDate!.day) {
+        throw ArgumentError('Task duration cannot cross midnight to another day');
       }
     }
   }
@@ -73,7 +75,8 @@ class Task {
     bool? isCompleted,
     String? description,
     TaskPriority? priority,
-    DateTime? dueTime,
+    DateTime? dueDate,
+    TimeOfDay? dueTime,
     Duration? duration,
     TaskRepetition? repetition,
   }) {
@@ -84,45 +87,71 @@ class Task {
       isCompleted: isCompleted ?? this.isCompleted,
       description: description ?? this.description,
       priority: priority ?? this.priority,
+      dueDate: dueDate ?? this.dueDate,
       dueTime: dueTime ?? this.dueTime,
       duration: duration ?? this.duration,
       repetition: repetition ?? this.repetition,
     );
   }
 
-  // Helper method to format time for display
+  DateTime? get dueDateTime {
+    if (dueDate == null) return null;
+    if (dueTime == null) return DateTime(dueDate!.year, dueDate!.month, dueDate!.day);
+    return DateTime(
+      dueDate!.year,
+      dueDate!.month,
+      dueDate!.day,
+      dueTime!.hour,
+      dueTime!.minute,
+    );
+  }
+
   String? get formattedTime {
     if (dueTime == null) return null;
-    return DateFormat.jm().format(dueTime!);
+    return _formatTimeOfDay(dueTime!);
   }
 
-  // Helper method to format duration for display
   String? get formattedDuration {
     if (duration == null || dueTime == null) return null;
-    final endTime = dueTime!.add(duration!);
-    return '${DateFormat.jm().format(dueTime!)} - ${DateFormat.jm().format(endTime)}';
+    final endTime = TimeOfDay(
+      hour: dueTime!.hour + duration!.inHours,
+      minute: dueTime!.minute + (duration!.inMinutes % 60),
+    );
+    return '${_formatTimeOfDay(dueTime!)} - ${_formatTimeOfDay(endTime)}';
   }
 
-  // Helper method to format date
   String get formattedDueDate {
-    if (dueTime == null) return '';
-    return DateFormat('MMM d, h:mm a').format(dueTime!);
+    if (dueDate == null) return '';
+    if (dueTime == null) return DateFormat('MMM d').format(dueDate!);
+    return DateFormat('MMM d, h:mm a').format(dueDateTime!);
   }
 
-  // Helper method to check if task is due today
   bool get isDueToday {
-    if (dueTime == null) return false;
+    if (dueDate == null) return false;
     final now = DateTime.now();
-    return dueTime!.year == now.year &&
-        dueTime!.month == now.month &&
-        dueTime!.day == now.day;
+    return dueDate!.year == now.year &&
+        dueDate!.month == now.month &&
+        dueDate!.day == now.day;
+  }
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    final now = DateTime.now();
+    final dt = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    return DateFormat.jm().format(dt);
+  }
+
+  static void registerAdapters() {
+    Hive.registerAdapter(TaskAdapter());
+    Hive.registerAdapter(TaskPriorityAdapter());
+    Hive.registerAdapter(TaskRepetitionAdapter());
+    Hive.registerAdapter(TimeOfDayAdapter());
+    Hive.registerAdapter(DurationAdapter());
   }
 }
 
-// Adapter for enum serialization
 class TaskPriorityAdapter extends TypeAdapter<TaskPriority> {
   @override
-  final int typeId = 10;
+  final int typeId = 1;
 
   @override
   TaskPriority read(BinaryReader reader) {
@@ -137,7 +166,7 @@ class TaskPriorityAdapter extends TypeAdapter<TaskPriority> {
 
 class TaskRepetitionAdapter extends TypeAdapter<TaskRepetition> {
   @override
-  final int typeId = 11;
+  final int typeId = 2;
 
   @override
   TaskRepetition read(BinaryReader reader) {
@@ -150,9 +179,27 @@ class TaskRepetitionAdapter extends TypeAdapter<TaskRepetition> {
   }
 }
 
+class TimeOfDayAdapter extends TypeAdapter<TimeOfDay> {
+  @override
+  final int typeId = 3;
+
+  @override
+  TimeOfDay read(BinaryReader reader) {
+    final hour = reader.readByte();
+    final minute = reader.readByte();
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  @override
+  void write(BinaryWriter writer, TimeOfDay obj) {
+    writer.writeByte(obj.hour);
+    writer.writeByte(obj.minute);
+  }
+}
+
 class DurationAdapter extends TypeAdapter<Duration> {
   @override
-  final int typeId = 12; // Choose a unique typeId (not used by other adapters)
+  final int typeId = 4;
 
   @override
   Duration read(BinaryReader reader) {

@@ -177,17 +177,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
             selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
             onDaySelected: (selectedDay, focusedDay) {
               setState(() => _selectedDate = selectedDay);
-              if (_selectedTime != null) {
-                widget.onDateSelected?.call(
-                  DateTime(
-                    selectedDay.year,
-                    selectedDay.month,
-                    selectedDay.day,
-                    _selectedTime!.hour,
-                    _selectedTime!.minute,
-                  ),
-                );
-              }
+              widget.onDateSelected?.call(selectedDay);
             },
             calendarStyle: CalendarStyle(
               selectedDecoration: BoxDecoration(
@@ -522,18 +512,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
 
   void _selectDate(DateTime date) {
     setState(() => _selectedDate = date);
-    // Only notify parent if time is selected
-    if (_selectedTime != null) {
-      widget.onDateSelected?.call(
-        DateTime(
-          date.year,
-          date.month,
-          date.day,
-          _selectedTime!.hour,
-          _selectedTime!.minute,
-        ),
-      );
-    }
+    widget.onDateSelected?.call(date);
   }
 
   void _selectNextWeekday(int weekday) {
@@ -547,16 +526,6 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     setState(() => _selectedTime = time);
     if (time != null) {
       widget.onTimeSelected?.call(time);
-      // When time is selected, also update the full DateTime
-      widget.onDateSelected?.call(
-        DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-          time.hour,
-          time.minute,
-        ),
-      );
     }
   }
 

@@ -43,11 +43,11 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   }
 
   String get _dueDateText {
-    if (_editedTask.dueTime == null) return 'Add due date';
+    if (_editedTask.dueDate == null) return 'Add due date';
 
     final now = DateTime.now();
-    final due = _editedTask.dueTime!;
-    final daysDiff = due.difference(now).inDays;
+    final due = _editedTask.dueDate!;
+    final daysDiff = due.difference(DateTime(now.year, now.month, now.day)).inDays;
 
     String daysText = '';
     if (daysDiff > 0) {
@@ -56,13 +56,20 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
       daysText = '${-daysDiff} ${daysDiff == -1 ? 'day' : 'days'} ago, ';
     }
 
-    return '$daysText${_dateFormat.format(due)}, ${_timeFormat.format(due)}';
+    String timeText = '';
+    if (_editedTask.dueTime != null) {
+      final fakeDateTime = DateTime(2023, 1, 1, 
+          _editedTask.dueTime!.hour, _editedTask.dueTime!.minute);
+      timeText = ', ${_timeFormat.format(fakeDateTime)}';
+    }
+
+    return '$daysText${_dateFormat.format(due)}$timeText';
   }
 
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _editedTask.dueTime ?? DateTime.now(),
+      initialDate: _editedTask.dueDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime(2100),
     );
@@ -70,24 +77,12 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     if (picked == null) return;
 
     setState(() {
-      _editedTask = _editedTask.copyWith(
-        dueTime: DateTime(
-          picked.year,
-          picked.month,
-          picked.day,
-          _editedTask.dueTime?.hour ?? 0,
-          _editedTask.dueTime?.minute ?? 0,
-        ),
-      );
+      _editedTask = _editedTask.copyWith(dueDate: picked);
     });
   }
 
   Future<void> _selectTime() async {
-    final initialTime =
-        _editedTask.dueTime != null
-            ? TimeOfDay.fromDateTime(_editedTask.dueTime!)
-            : TimeOfDay.now();
-
+    final initialTime = _editedTask.dueTime ?? TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
       initialTime: initialTime,
@@ -96,15 +91,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     if (picked == null) return;
 
     setState(() {
-      _editedTask = _editedTask.copyWith(
-        dueTime: DateTime(
-          _editedTask.dueTime?.year ?? DateTime.now().year,
-          _editedTask.dueTime?.month ?? DateTime.now().month,
-          _editedTask.dueTime?.day ?? DateTime.now().day,
-          picked.hour,
-          picked.minute,
-        ),
-      );
+      _editedTask = _editedTask.copyWith(dueTime: picked);
     });
   }
 
@@ -146,7 +133,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
         children: [
           _buildHeaderRow(),
           const Divider(),
-          _buildDateAndPriorityRow(),
+          _buildDateAndTimeRow(),
           _buildTitleField(),
           _buildDescriptionField(),
           _buildSaveButton(),
@@ -172,14 +159,13 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   Widget _buildCategoryDropdown() {
     return DropdownButton<String>(
       value: _editedTask.category,
-      items:
-          widget.categories
-              .where((c) => c != 'All')
-              .map(
-                (category) =>
-                    DropdownMenuItem(value: category, child: Text(category)),
-              )
-              .toList(),
+      items: widget.categories
+          .where((c) => c != 'All')
+          .map((category) => DropdownMenuItem(
+                value: category,
+                child: Text(category),
+              ))
+          .toList(),
       onChanged: (value) {
         if (value != null) {
           setState(() => _editedTask = _editedTask.copyWith(category: value));
@@ -188,46 +174,66 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     );
   }
 
-  Widget _buildDateAndPriorityRow() {
-    return ListTile(
-      title: Text(_dueDateText),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: Icon(
-              Icons.repeat,
-              color:
-                  _editedTask.repetition != TaskRepetition.never
-                      ? Colors.blue
-                      : Colors.grey,
-            ),
-            onPressed:
-                () => _cycleEnum(
-                  TaskRepetition.values,
-                  _editedTask.repetition,
-                  (value) => setState(
-                    () => _editedTask = _editedTask.copyWith(repetition: value),
-                  ),
-                ), // Added missing parenthesis here
+  Widget _buildDateAndTimeRow() {
+    return Column(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.calendar_today),
+          title: Text(_editedTask.dueDate != null
+              ? _dateFormat.format(_editedTask.dueDate!)
+              : 'No date set'),
+          trailing: IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: _selectDate,
           ),
-          IconButton(
-            icon: Icon(
-              Icons.flag,
-              color: _getPriorityColor(_editedTask.priority),
+          onTap: _selectDate,
+        ),
+        if (_editedTask.dueDate != null)
+          ListTile(
+            leading: const Icon(Icons.access_time),
+            title: Text(_editedTask.dueTime != null
+                ? _editedTask.dueTime!.format(context)
+                : 'No time set'),
+            trailing: IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: _selectTime,
             ),
-            onPressed:
-                () => _cycleEnum(
-                  TaskPriority.values,
-                  _editedTask.priority,
-                  (value) => setState(
-                    () => _editedTask = _editedTask.copyWith(priority: value),
-                  ),
-                ), // Added missing parenthesis here
+            onTap: _selectTime,
           ),
-        ],
-      ),
-      onTap: _selectDate,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              icon: Icon(
+                Icons.repeat,
+                color: _editedTask.repetition != TaskRepetition.never
+                    ? Colors.blue
+                    : Colors.grey,
+              ),
+              onPressed: () => _cycleEnum(
+                TaskRepetition.values,
+                _editedTask.repetition,
+                (value) => setState(
+                  () => _editedTask = _editedTask.copyWith(repetition: value),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.flag,
+                color: _getPriorityColor(_editedTask.priority),
+              ),
+              onPressed: () => _cycleEnum(
+                TaskPriority.values,
+                _editedTask.priority,
+                (value) => setState(
+                  () => _editedTask = _editedTask.copyWith(priority: value),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -239,9 +245,8 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
         hintText: 'Task title',
       ),
       style: Theme.of(context).textTheme.titleMedium,
-      onChanged:
-          (value) =>
-              setState(() => _editedTask = _editedTask.copyWith(title: value)),
+      onChanged: (value) =>
+          setState(() => _editedTask = _editedTask.copyWith(title: value)),
     );
   }
 
@@ -254,10 +259,8 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
           hintText: 'Add description...',
         ),
         maxLines: null,
-        onChanged:
-            (value) => setState(
-              () => _editedTask = _editedTask.copyWith(description: value),
-            ),
+        onChanged: (value) =>
+            setState(() => _editedTask = _editedTask.copyWith(description: value)),
       ),
     );
   }
