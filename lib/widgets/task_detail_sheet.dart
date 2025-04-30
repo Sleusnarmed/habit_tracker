@@ -25,7 +25,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   final _dateFormat = DateFormat('MMM d');
-  final _timeFormat = DateFormat('jm');
+ 
 
   @override
   void initState() {
@@ -42,29 +42,6 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     super.dispose();
   }
 
-  String get _dueDateText {
-    if (_editedTask.dueDate == null) return 'Add due date';
-
-    final now = DateTime.now();
-    final due = _editedTask.dueDate!;
-    final daysDiff = due.difference(DateTime(now.year, now.month, now.day)).inDays;
-
-    String daysText = '';
-    if (daysDiff > 0) {
-      daysText = '$daysDiff ${daysDiff == 1 ? 'day' : 'days'} later, ';
-    } else if (daysDiff < 0) {
-      daysText = '${-daysDiff} ${daysDiff == -1 ? 'day' : 'days'} ago, ';
-    }
-
-    String timeText = '';
-    if (_editedTask.dueTime != null) {
-      final fakeDateTime = DateTime(2023, 1, 1, 
-          _editedTask.dueTime!.hour, _editedTask.dueTime!.minute);
-      timeText = ', ${_timeFormat.format(fakeDateTime)}';
-    }
-
-    return '$daysText${_dateFormat.format(due)}$timeText';
-  }
 
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
