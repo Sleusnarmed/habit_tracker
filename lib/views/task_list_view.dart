@@ -103,39 +103,37 @@ class _TaskListViewState extends State<TaskListView> {
   }
 
   Widget _buildTaskList(List<Task> tasks) {
-    final List<Task> activeTasks =
+    final List<Task> filteredTasks =
         _showCompletedTasks
-            ? tasks.where((task) => !task.isCompleted).toList()
-            : tasks;
+            ? tasks
+            : tasks.where((task) => !task.isCompleted).toList();
 
+    final List<Task> activeTasks =
+        filteredTasks.where((task) => !task.isCompleted).toList();
     final List<Task> completedTasks =
         _showCompletedTasks
-            ? tasks.where((task) => task.isCompleted).toList()
+            ? filteredTasks.where((task) => task.isCompleted).toList()
             : [];
 
     switch (_groupFilter) {
       case GroupFilter.none:
         return ListView.builder(
-          itemCount:
-              activeTasks.length +
-              (_showCompletedTasks && completedTasks.isNotEmpty ? 1 : 0),
+          itemCount: activeTasks.length + (completedTasks.isNotEmpty ? 1 : 0),
           itemBuilder: (context, index) {
-            if (_showCompletedTasks &&
-                completedTasks.isNotEmpty &&
-                index == activeTasks.length) {
+            if (completedTasks.isNotEmpty && index == activeTasks.length) {
               return _buildTaskGroup('Completed', completedTasks);
             }
             return TaskTile(
               task: activeTasks[index],
               taskProvider: Provider.of<TaskProvider>(context),
               currentCategory: _currentCategory,
-              currentGroupOrder: _groupFilter, // Pass the current group filter
+              currentGroupOrder: _groupFilter,
             );
           },
         );
       case GroupFilter.date:
         final list = _buildDateGroupedList(activeTasks);
-        if (_showCompletedTasks && completedTasks.isNotEmpty) {
+        if (completedTasks.isNotEmpty) {
           return Column(
             children: [
               Expanded(child: list),
@@ -146,7 +144,7 @@ class _TaskListViewState extends State<TaskListView> {
         return list;
       case GroupFilter.priority:
         final list = _buildPriorityGroupedList(activeTasks);
-        if (_showCompletedTasks && completedTasks.isNotEmpty) {
+        if (completedTasks.isNotEmpty) {
           return Column(
             children: [
               Expanded(child: list),
