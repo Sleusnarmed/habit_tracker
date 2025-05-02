@@ -40,7 +40,7 @@ class Task {
   final DateTime? dueDate;
 
   @HiveField(7)
-  final TimeOfDay? dueTime;
+  final TimeOfDay? startTime; // Renamed from dueTime for clarity
 
   @HiveField(8)
   final Duration? duration;
@@ -56,16 +56,51 @@ class Task {
     this.description = '',
     this.priority = TaskPriority.none,
     this.dueDate,
-    this.dueTime,
+    this.startTime,
     this.duration,
     this.repetition = TaskRepetition.never,
   }) {
-    if (dueDate != null && dueTime != null && duration != null) {
-      final endTime = dueDateTime!.add(duration!);
-      if (endTime.day != dueDate!.day) {
-        throw ArgumentError('Task duration cannot cross midnight to another day');
+    // Validate that duration doesn't cross midnight when date and time are provided
+    if (hasDuration) {
+      if (endDateTime!.day != startDateTime!.day) {
+        throw ArgumentError(
+          'Task duration cannot cross midnight to another day',
+        );
       }
     }
+  }
+
+  /// Returns true if this task has both start time and duration
+  bool get hasDuration => startTime != null && duration != null;
+
+  /// Returns true if this task has a specific time (without duration)
+  bool get hasTime => startTime != null && duration == null;
+
+  /// Returns the start DateTime (combination of dueDate and startTime)
+  DateTime? get startDateTime {
+    if (dueDate == null) return null;
+    if (startTime == null)
+      return DateTime(dueDate!.year, dueDate!.month, dueDate!.day);
+    return DateTime(
+      dueDate!.year,
+      dueDate!.month,
+      dueDate!.day,
+      startTime!.hour,
+      startTime!.minute,
+    );
+  }
+
+  /// Returns the end DateTime (startDateTime + duration)
+  DateTime? get endDateTime {
+    if (!hasDuration) return null;
+    return startDateTime!.add(duration!);
+  }
+
+  /// Returns the end TimeOfDay
+  TimeOfDay? get endTime {
+    if (!hasDuration) return null;
+    final end = endDateTime!;
+    return TimeOfDay(hour: end.hour, minute: end.minute);
   }
 
   Task copyWith({
@@ -76,7 +111,7 @@ class Task {
     String? description,
     TaskPriority? priority,
     DateTime? dueDate,
-    TimeOfDay? dueTime,
+    TimeOfDay? startTime,
     Duration? duration,
     TaskRepetition? repetition,
   }) {
@@ -88,42 +123,31 @@ class Task {
       description: description ?? this.description,
       priority: priority ?? this.priority,
       dueDate: dueDate ?? this.dueDate,
-      dueTime: dueTime ?? this.dueTime,
+      startTime: startTime ?? this.startTime,
       duration: duration ?? this.duration,
       repetition: repetition ?? this.repetition,
     );
   }
 
-  DateTime? get dueDateTime {
-    if (dueDate == null) return null;
-    if (dueTime == null) return DateTime(dueDate!.year, dueDate!.month, dueDate!.day);
-    return DateTime(
-      dueDate!.year,
-      dueDate!.month,
-      dueDate!.day,
-      dueTime!.hour,
-      dueTime!.minute,
-    );
+  /// Formatted time range (e.g., "7:00 PM - 8:00 PM")
+  String? get formattedTimeRange {
+    if (!hasDuration) {
+      if (startTime == null) return null;
+      return _formatTimeOfDay(startTime!);
+    }
+    return '${_formatTimeOfDay(startTime!)} - ${_formatTimeOfDay(endTime!)}';
   }
 
-  String? get formattedTime {
-    if (dueTime == null) return null;
-    return _formatTimeOfDay(dueTime!);
-  }
-
+  /// Formatted duration in hours and minutes (e.g., "1h 30m")
   String? get formattedDuration {
-    if (duration == null || dueTime == null) return null;
-    final endTime = TimeOfDay(
-      hour: dueTime!.hour + duration!.inHours,
-      minute: dueTime!.minute + (duration!.inMinutes % 60),
-    );
-    return '${_formatTimeOfDay(dueTime!)} - ${_formatTimeOfDay(endTime)}';
+    if (duration == null) return null;
+    return '${duration!.inHours}h ${duration!.inMinutes.remainder(60)}m';
   }
 
   String get formattedDueDate {
     if (dueDate == null) return '';
-    if (dueTime == null) return DateFormat('MMM d').format(dueDate!);
-    return DateFormat('MMM d, h:mm a').format(dueDateTime!);
+    if (startTime == null) return DateFormat('MMM d').format(dueDate!);
+    return DateFormat('MMM d, h:mm a').format(startDateTime!);
   }
 
   bool get isDueToday {
@@ -134,6 +158,18 @@ class Task {
         dueDate!.day == now.day;
   }
 
+  /// Checks if the given time falls within this task's duration
+  bool isTimeWithinDuration(TimeOfDay time) {
+    if (!hasDuration) return false;
+
+    final timeInMinutes = time.hour * 60 + time.minute;
+    final startInMinutes = startTime!.hour * 60 + startTime!.minute;
+    final endInMinutes = endTime!.hour * 60 + endTime!.minute;
+
+    return timeInMinutes >= startInMinutes && timeInMinutes <= endInMinutes;
+  }
+
+  /// Helper method to format TimeOfDay
   String _formatTimeOfDay(TimeOfDay time) {
     final now = DateTime.now();
     final dt = DateTime(now.year, now.month, now.day, time.hour, time.minute);

@@ -41,17 +41,17 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
 
     // Initialize date and time from existing task
     _dueDate = task?.dueDate;
-    _startTime = task?.dueTime;
+    _startTime = task?.startTime;
 
     // Initialize duration if exists
-    if (task?.duration != null && task?.dueTime != null) {
+    if (task?.duration != null && task?.startTime != null) {
       final fakeDate = DateTime(2023, 1, 1); // Arbitrary date for calculation
       final start = DateTime(
         fakeDate.year,
         fakeDate.month,
         fakeDate.day,
-        task!.dueTime!.hour,
-        task.dueTime!.minute,
+        task!.startTime!.hour,
+        task.startTime!.minute,
       );
       final end = start.add(task.duration!);
       _endTime = TimeOfDay.fromDateTime(end);
@@ -287,7 +287,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       description: _descController.text,
       priority: _priority,
       dueDate: _dueDate,
-      dueTime: _startTime,
+      startTime: _startTime,
       duration: _duration,
       repetition: _repetition,
     );

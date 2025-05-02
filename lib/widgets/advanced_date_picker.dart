@@ -173,7 +173,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
             shouldFillViewport: true,
             firstDay: DateTime.now(),
             lastDay: DateTime.now().add(const Duration(days: 365)),
-            focusedDay: _selectedDate,
+            focusedDay: DateTime(2025, 5, 2),
             selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
             onDaySelected: (selectedDay, focusedDay) {
               setState(() => _selectedDate = selectedDay);

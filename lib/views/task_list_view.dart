@@ -584,7 +584,7 @@ class TaskMetaInfo extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            if (task.dueTime != null)
+            if (task.startTime != null)
               Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
             if (task.repetition != TaskRepetition.never)
               Padding(

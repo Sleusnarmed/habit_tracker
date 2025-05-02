@@ -59,7 +59,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   }
 
   Future<void> _selectTime() async {
-    final initialTime = _editedTask.dueTime ?? TimeOfDay.now();
+    final initialTime = _editedTask.startTime ?? TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
       initialTime: initialTime,
@@ -68,7 +68,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     if (picked == null) return;
 
     setState(() {
-      _editedTask = _editedTask.copyWith(dueTime: picked);
+      _editedTask = _editedTask.copyWith(startTime: picked);
     });
   }
 
@@ -168,8 +168,8 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
         if (_editedTask.dueDate != null)
           ListTile(
             leading: const Icon(Icons.access_time),
-            title: Text(_editedTask.dueTime != null
-                ? _editedTask.dueTime!.format(context)
+            title: Text(_editedTask.startTime != null
+                ? _editedTask.startTime!.format(context)
                 : 'No time set'),
             trailing: IconButton(
               icon: const Icon(Icons.edit),
