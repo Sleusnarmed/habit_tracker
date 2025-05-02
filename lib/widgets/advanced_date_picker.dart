@@ -32,11 +32,10 @@ class AdvancedDatePicker extends StatefulWidget {
 class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   late DateTime _selectedDate;
   late DateTime _focusedDay;
-  late TimeOfDay? _selectedTime;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
   late TaskRepetition _selectedRepetition;
   bool _showDurationView = false;
-  late TimeOfDay _startTime;
-  late TimeOfDay _endTime;
   late List<_QuickOption> _quickOptions;
 
   @override
@@ -45,12 +44,17 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     final now = DateTime.now();
     _selectedDate = widget.initialDate ?? now;
     _focusedDay = _selectedDate;
-    _selectedTime = widget.initialTime;
     _selectedRepetition = widget.initialRepetition;
 
-    final timeNow = TimeOfDay.now();
-    _startTime = timeNow;
-    _endTime = TimeOfDay(hour: timeNow.hour + 1, minute: timeNow.minute);
+    // Initialize time values
+    _startTime = widget.initialTime;
+    if (_startTime != null) {
+      _endTime = TimeOfDay(
+        hour: _startTime!.hour + 1,
+        minute: _startTime!.minute,
+      );
+    }
+
     _quickOptions = [
       _QuickOption<DateTime>(
         icon: Icons.today,
@@ -207,19 +211,16 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
         onDaySelected: (selectedDay, focusedDay) {
           setState(() {
             _selectedDate = selectedDay;
-            // This auto-switch months in case a day is selected outside of a month
             _focusedDay = selectedDay;
           });
         },
         onPageChanged: (focusedDay) {
           setState(() {
-            // Only update focusedDay when manually navigating months
             if (!isSameDay(_focusedDay, focusedDay)) {
               _focusedDay = focusedDay;
             }
           });
         },
-
         calendarStyle: CalendarStyle(
           selectedDecoration: BoxDecoration(
             color: Theme.of(context).primaryColor,
@@ -262,6 +263,8 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
           const SizedBox(height: 16),
           _buildDateTimeCards(),
           const SizedBox(height: 16),
+          _buildTimeRangePicker(),
+          const SizedBox(height: 16),
           _buildReminderOption(),
           _buildRepetitionOption(),
         ],
@@ -279,12 +282,74 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
         ),
         const SizedBox(width: 16),
         _buildInfoCard(
-          title: 'Hour',
+          title: 'Time',
           mainText:
-              '${_startTime.format(context)} - ${_endTime.format(context)}',
-          secondaryText: _calculateDurationText(),
-          onTap: () => _showDurationPicker(context),
+              _startTime != null
+                  ? _endTime != null
+                      ? '${_startTime!.format(context)} - ${_endTime!.format(context)}'
+                      : _startTime!.format(context)
+                  : 'None',
+          secondaryText:
+              _startTime != null && _endTime != null
+                  ? _calculateDurationText()
+                  : 'No duration',
+          onTap: () {
+            if (_startTime == null) {
+              _showTimePicker(isStartTime: true);
+            } else {
+              _showDurationPicker(context);
+            }
+          },
         ),
+      ],
+    );
+  }
+
+  Widget _buildTimeRangePicker() {
+    return Column(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.access_time),
+          title: const Text('Start Time'),
+          trailing: Text(
+            _startTime?.format(context) ?? 'Not set',
+            style: TextStyle(
+              color:
+                  _startTime == null
+                      ? Colors.grey
+                      : Theme.of(context).textTheme.bodyLarge?.color,
+            ),
+          ),
+          onTap: () => _showTimePicker(isStartTime: true),
+        ),
+        ListTile(
+          leading: const Icon(Icons.timer_outlined),
+          title: const Text('End Time'),
+          trailing: Text(
+            _endTime?.format(context) ?? 'Not set',
+            style: TextStyle(
+              color:
+                  _endTime == null
+                      ? Colors.grey
+                      : Theme.of(context).textTheme.bodyLarge?.color,
+            ),
+          ),
+          onTap: () {
+            if (_startTime == null) {
+              _showTimePicker(isStartTime: true);
+            } else {
+              _showTimePicker(isStartTime: false);
+            }
+          },
+        ),
+        if (_startTime != null && _endTime != null)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Duration: ${_calculateDurationText()}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
       ],
     );
   }
@@ -354,16 +419,16 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   Widget _buildTimeOption() {
     return ListTile(
       leading: const Icon(Icons.access_time),
-      title: const Text('Hour', style: TextStyle(fontWeight: FontWeight.bold)),
+      title: const Text('Time', style: TextStyle(fontWeight: FontWeight.bold)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            _selectedTime?.format(context) ?? 'None',
+            _startTime?.format(context) ?? 'None',
             style: TextStyle(color: Colors.grey[600]),
           ),
           const SizedBox(width: 8),
-          if (_selectedTime != null)
+          if (_startTime != null)
             IconButton(
               icon: const Icon(Icons.close, size: 20),
               onPressed: () => _selectTime(null),
@@ -373,7 +438,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
             const Icon(Icons.chevron_right, size: 20),
         ],
       ),
-      onTap: _showTimePicker,
+      onTap: () => _showTimePicker(isStartTime: true),
     );
   }
 
@@ -435,19 +500,21 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   }
 
   String _calculateDurationText() {
-    final start = DateTime(2023, 1, 1, _startTime.hour, _startTime.minute);
-    final end = DateTime(2023, 1, 1, _endTime.hour, _endTime.minute);
+    if (_startTime == null || _endTime == null) return 'No duration';
+
+    final start = DateTime(2023, 1, 1, _startTime!.hour, _startTime!.minute);
+    final end = DateTime(2023, 1, 1, _endTime!.hour, _endTime!.minute);
     final difference = end.difference(start);
 
-    if (difference.inMinutes == 0) return 'Duration: 0 minutes';
+    if (difference.inMinutes == 0) return '0 minutes';
 
     final hours = difference.inHours;
     final minutes = difference.inMinutes % 60;
 
-    if (hours == 0) return 'Duration: $minutes minutes';
+    if (hours == 0) return ' $minutes minutes';
     if (minutes == 0)
-      return 'Duration: $hours ${hours == 1 ? 'hour' : 'hours'}';
-    return 'Duration: $hours ${hours == 1 ? 'hour' : 'hours'} $minutes minutes';
+      return ' $hours ${hours == 1 ? 'hour' : 'hours'}';
+    return ' $hours ${hours == 1 ? 'hour' : 'hours'} $minutes minutes';
   }
 
   String _getRepetitionText(TaskRepetition repeat) {
@@ -469,40 +536,97 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     }
   }
 
+  bool _isTimeBefore(TimeOfDay a, TimeOfDay b) {
+    return a.hour < b.hour || (a.hour == b.hour && a.minute < b.minute);
+  }
+
   // Action methods
   void _selectDate(DateTime date) => setState(() => _selectedDate = date);
 
-  void _selectTime(TimeOfDay? time) => setState(() => _selectedTime = time);
+  void _selectTime(TimeOfDay? time) {
+    setState(() {
+      _startTime = time;
+      _endTime =
+          time == null
+              ? null
+              : TimeOfDay(hour: time.hour + 1, minute: time.minute);
+    });
+  }
 
   void _selectRepetition(TaskRepetition repetition) =>
       setState(() => _selectedRepetition = repetition);
 
   void _handleSave() {
     widget.onDateSelected?.call(_selectedDate);
-    if (_selectedTime != null) {
-      widget.onTimeSelected?.call(_selectedTime!);
+    if (_startTime != null) {
+      widget.onTimeSelected?.call(_startTime!);
     }
     widget.onRepetitionChanged?.call(_selectedRepetition);
     widget.onSave();
   }
 
-  Future<void> _showTimePicker() async {
+  Future<void> _showTimePicker({required bool isStartTime}) async {
+    final now = TimeOfDay.now();
+    final initialTime =
+        isStartTime
+            ? _startTime ?? now
+            : _endTime ??
+                (_startTime != null
+                    ? TimeOfDay(
+                      hour: _startTime!.hour + 1,
+                      minute: _startTime!.minute,
+                    )
+                    : now);
+
     final picked = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
+      initialTime: initialTime,
     );
-    if (picked != null) _selectTime(picked);
+
+    if (picked != null) {
+      setState(() {
+        if (isStartTime) {
+          _startTime = picked;
+          // Auto-adjust end time if it would be before start time
+          if (_endTime != null && _isTimeBefore(_endTime!, picked)) {
+            _endTime = TimeOfDay(hour: picked.hour + 1, minute: picked.minute);
+          } else if (_endTime == null) {
+            _endTime = TimeOfDay(hour: picked.hour + 1, minute: picked.minute);
+          }
+        } else {
+          _endTime = picked;
+          // Ensure start time exists when setting end time
+          if (_startTime == null) {
+            _startTime = TimeOfDay(
+              hour: picked.hour > 0 ? picked.hour - 1 : 0,
+              minute: picked.minute,
+            );
+          }
+        }
+      });
+    }
   }
 
   Future<void> _showDurationPicker(BuildContext context) async {
+    if (_startTime == null) {
+      await _showTimePicker(isStartTime: true);
+      return;
+    }
+
     final result = await showDialog<List<TimeOfDay>>(
       context: context,
       builder:
           (context) => DurationPickerDialog(
-            initialStartTime: _startTime,
-            initialEndTime: _endTime,
+            initialStartTime: _startTime!,
+            initialEndTime:
+                _endTime ??
+                TimeOfDay(
+                  hour: _startTime!.hour + 1,
+                  minute: _startTime!.minute,
+                ),
           ),
     );
+
     if (result != null && result.length == 2) {
       setState(() {
         _startTime = result[0];
@@ -523,7 +647,6 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   }
 }
 
-// Helper classes for better read of the code
 class _QuickOption<T> {
   final IconData icon;
   final String label;
