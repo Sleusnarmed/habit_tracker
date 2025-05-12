@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:habit_tracker/views/account_view.dart';
 import 'package:habit_tracker/views/task_list_view.dart';
-import 'package:habit_tracker/views/calendar_view.dart';
+import 'package:habit_tracker/views/task_calendar_screen.dart';
 import 'package:habit_tracker/views/matrix_view.dart';
 import 'package:habit_tracker/views/habits_view.dart';
 
@@ -19,7 +19,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
 
   final List<Widget> _pages = const [
     TaskListView(),
-    CalendarView(),
+    TaskCalendarScreen(),
     MatrixView(),
     HabitsView(),
     AccountView(),
