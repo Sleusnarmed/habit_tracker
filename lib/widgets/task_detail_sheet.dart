@@ -26,6 +26,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   final _dateFormat = DateFormat('MMM d');
+  final _timeFormat = DateFormat.jm();
 
   @override
   void initState() {
@@ -49,16 +50,22 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
       builder:
           (context) => AdvancedDatePicker(
             initialDate: _editedTask.dueDate,
-            initialTime: _editedTask.startTime,
+            initialStartTime: _editedTask.startTime,
+            initialEndTime: _editedTask.endTime,
             initialRepetition: _editedTask.repetition,
             onDateSelected: (date) {
               setState(() {
                 _editedTask = _editedTask.copyWith(dueDate: date);
               });
             },
-            onTimeSelected: (time) {
+            onStartTimeSelected: (time) {
               setState(() {
                 _editedTask = _editedTask.copyWith(startTime: time);
+              });
+            },
+            onEndTimeSelected: (time) {
+              setState(() {
+                _editedTask = _editedTask.copyWith(endTime: time);
               });
             },
             onRepetitionChanged: (repetition) {
@@ -73,6 +80,21 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   }
 
   void _saveChanges() {
+    // Validate time range if both times are set
+    if (_editedTask.startTime != null && _editedTask.endTime != null) {
+      final startMinutes =
+          _editedTask.startTime!.hour * 60 + _editedTask.startTime!.minute;
+      final endMinutes =
+          _editedTask.endTime!.hour * 60 + _editedTask.endTime!.minute;
+
+      if (endMinutes <= startMinutes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time')),
+        );
+        return;
+      }
+    }
+
     widget.onSave(_editedTask);
     Navigator.pop(context);
   }
@@ -98,6 +120,22 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
       TaskPriority.low => 'Low',
       TaskPriority.none => 'None',
     };
+  }
+
+  String _formatTimeRange() {
+    if (_editedTask.startTime == null) return '';
+    if (_editedTask.endTime == null) {
+      return _timeFormat.format(
+        DateTime(
+          2023,
+          1,
+          1,
+          _editedTask.startTime!.hour,
+          _editedTask.startTime!.minute,
+        ),
+      );
+    }
+    return '${_timeFormat.format(DateTime(2023, 1, 1, _editedTask.startTime!.hour, _editedTask.startTime!.minute))} - ${_timeFormat.format(DateTime(2023, 1, 1, _editedTask.endTime!.hour, _editedTask.endTime!.minute))}';
   }
 
   @override
@@ -151,7 +189,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
           setState(() => _editedTask = _editedTask.copyWith(category: value));
         }
       },
-      underline: SizedBox(),
+      underline: const SizedBox(),
     );
   }
 
@@ -163,9 +201,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
             leading: const Icon(Icons.calendar_today),
             title: Text(
               _editedTask.dueDate != null
-                  ? _editedTask.startTime != null
-                      ? '${_dateFormat.format(_editedTask.dueDate!)}, ${_editedTask.startTime!.format(context)}'
-                      : _dateFormat.format(_editedTask.dueDate!)
+                  ? '${_dateFormat.format(_editedTask.dueDate!)}${_editedTask.startTime != null ? ', ${_formatTimeRange()}' : ''}'
                   : 'No date/time set',
             ),
             onTap: _showAdvancedDatePicker,

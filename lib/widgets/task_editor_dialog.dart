@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:habit_tracker/widgets/advanced_date_picker.dart';
-import 'package:intl/intl.dart';
 import '../models/task.dart';
 
 class TaskEditorDialog extends StatefulWidget {
@@ -24,9 +23,9 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
   late final TextEditingController _descController;
   late String _category;
   late TaskPriority _priority;
-  DateTime? _dueDate; // Keep this as it maps to Task.dueDate
-  TimeOfDay? _startTime; // This maps to Task.dueTime
-  TimeOfDay? _endTime; // For duration calculation
+  DateTime? _dueDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
   late TaskRepetition _repetition;
 
   @override
@@ -38,24 +37,9 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     _category = task?.category ?? widget.initialCategory;
     _priority = task?.priority ?? TaskPriority.none;
     _repetition = task?.repetition ?? TaskRepetition.never;
-
-    // Initialize date and time from existing task
     _dueDate = task?.dueDate;
     _startTime = task?.startTime;
-
-    // Initialize duration if exists
-    if (task?.duration != null && task?.startTime != null) {
-      final fakeDate = DateTime(2023, 1, 1); // Arbitrary date for calculation
-      final start = DateTime(
-        fakeDate.year,
-        fakeDate.month,
-        fakeDate.day,
-        task!.startTime!.hour,
-        task.startTime!.minute,
-      );
-      final end = start.add(task.duration!);
-      _endTime = TimeOfDay.fromDateTime(end);
-    }
+    _endTime = task?.endTime;
   }
 
   @override
@@ -65,28 +49,6 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
     super.dispose();
   }
 
-  Duration? get _duration {
-    if (_startTime == null || _endTime == null) return null;
-
-    final fakeDate = DateTime(2023, 1, 1); // Use arbitrary date for calculation
-    final start = DateTime(
-      fakeDate.year,
-      fakeDate.month,
-      fakeDate.day,
-      _startTime!.hour,
-      _startTime!.minute,
-    );
-    final end = DateTime(
-      fakeDate.year,
-      fakeDate.month,
-      fakeDate.day,
-      _endTime!.hour,
-      _endTime!.minute,
-    );
-
-    return end.difference(start);
-  }
-
   void _showAdvancedDatePicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -94,18 +56,20 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       builder:
           (context) => AdvancedDatePicker(
             initialDate: _dueDate,
-            initialTime: _startTime,
+            initialStartTime: _startTime,
+            initialEndTime: _endTime,
             initialRepetition: _repetition,
             onDateSelected:
                 (date) => setState(() {
                   _dueDate = date;
-                  // Clear times if date changes
-                  if (_startTime != null && _dueDate == null) {
+                  // Clear the times if date is removed
+                  if (_dueDate == null) {
                     _startTime = null;
                     _endTime = null;
                   }
                 }),
-            onTimeSelected: (time) => setState(() => _startTime = time),
+            onStartTimeSelected: (time) => setState(() => _startTime = time),
+            onEndTimeSelected: (time) => setState(() => _endTime = time),
             onRepetitionChanged:
                 (repeat) => setState(() => _repetition = repeat),
             onSave: () => Navigator.pop(context),
@@ -241,43 +205,24 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       ).showSnackBar(const SnackBar(content: Text('Title is required')));
       return;
     }
-    try {
-      Navigator.pop(context, _buildTask());
-    } on ArgumentError catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Invalid time range')),
-      );
-    }
-  }
 
-  Task _buildTask() {
-    DateTime? dueTime;
+    // Validate the range between startTime and endTime
+    if (_startTime != null && _endTime != null) {
+      final startMinutes = _startTime!.hour * 60 + _startTime!.minute;
+      final endMinutes = _endTime!.hour * 60 + _endTime!.minute;
 
-    if (_dueDate != null && _startTime != null) {
-      // Only combine if both exist
-      dueTime = DateTime(
-        _dueDate!.year,
-        _dueDate!.month,
-        _dueDate!.day,
-        _startTime!.hour,
-        _startTime!.minute,
-      );
-
-      if (_endTime != null) {
-        final endDateTime = DateTime(
-          _dueDate!.year,
-          _dueDate!.month,
-          _dueDate!.day,
-          _endTime!.hour,
-          _endTime!.minute,
+      if (endMinutes <= startMinutes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time')),
         );
-
-        if (endDateTime.day != dueTime.day) {
-          throw ArgumentError('Duration cannot cross midnight');
-        }
+        return;
       }
     }
 
+    Navigator.pop(context, _buildTask());
+  }
+
+  Task _buildTask() {
     return Task(
       id:
           widget.initialTask?.id ??
@@ -288,8 +233,9 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       priority: _priority,
       dueDate: _dueDate,
       startTime: _startTime,
-      duration: _duration,
+      endTime: _endTime,
       repetition: _repetition,
+      isCompleted: widget.initialTask?.isCompleted ?? false,
     );
   }
 
@@ -305,12 +251,11 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).dialogBackgroundColor,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title
           TextField(
             controller: _titleController,
             decoration: InputDecoration(
@@ -320,7 +265,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                 context,
               ).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
             ),
-            style: Theme.of(context).textTheme.titleMedium, //Fontsize
+            style: Theme.of(context).textTheme.titleMedium,
             autofocus: true,
           ),
 
@@ -345,7 +290,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
               Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.calendar_today, size: 24),
+                    icon: const Icon(Icons.calendar_today, size: 24),
                     onPressed: () => _showAdvancedDatePicker(context),
                   ),
                   IconButton(
@@ -357,7 +302,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                     onPressed: () => _showPriorityPicker(context),
                   ),
                   IconButton(
-                    icon: Icon(Icons.arrow_forward, size: 24),
+                    icon: const Icon(Icons.arrow_forward, size: 24),
                     onPressed: () => _showCategoryPicker(context),
                   ),
                 ],
@@ -369,7 +314,7 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
                 elevation: 0,
                 backgroundColor: Theme.of(context).primaryColor,
                 onPressed: _saveTask,
-                child: Icon(Icons.send, color: Colors.white),
+                child: const Icon(Icons.send, color: Colors.white),
               ),
             ],
           ),
@@ -389,11 +334,5 @@ class _TaskEditorDialogState extends State<TaskEditorDialog> {
       case TaskPriority.none:
         return Colors.grey;
     }
-  }
-}
-
-extension StringExtension on String {
-  String capitalize() {
-    return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
   }
 }

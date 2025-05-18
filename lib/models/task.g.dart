@@ -25,7 +25,7 @@ class TaskAdapter extends TypeAdapter<Task> {
       priority: fields[5] as TaskPriority,
       dueDate: fields[6] as DateTime?,
       startTime: fields[7] as TimeOfDay?,
-      duration: fields[8] as Duration?,
+      endTime: fields[8] as TimeOfDay?,
       repetition: fields[9] as TaskRepetition,
     );
   }
@@ -51,7 +51,7 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(7)
       ..write(obj.startTime)
       ..writeByte(8)
-      ..write(obj.duration)
+      ..write(obj.endTime)
       ..writeByte(9)
       ..write(obj.repetition);
   }

@@ -5,10 +5,12 @@ import '../models/task.dart';
 
 class AdvancedDatePicker extends StatefulWidget {
   final DateTime? initialDate;
-  final TimeOfDay? initialTime;
+  final TimeOfDay? initialStartTime;
+  final TimeOfDay? initialEndTime;
   final TaskRepetition initialRepetition;
   final ValueChanged<DateTime>? onDateSelected;
-  final ValueChanged<TimeOfDay>? onTimeSelected;
+  final ValueChanged<TimeOfDay>? onStartTimeSelected;
+  final ValueChanged<TimeOfDay>? onEndTimeSelected;
   final ValueChanged<TaskRepetition>? onRepetitionChanged;
   final VoidCallback onSave;
   final VoidCallback onCancel;
@@ -16,10 +18,12 @@ class AdvancedDatePicker extends StatefulWidget {
   const AdvancedDatePicker({
     super.key,
     this.initialDate,
-    this.initialTime,
+    this.initialStartTime,
+    this.initialEndTime,
     this.initialRepetition = TaskRepetition.never,
     this.onDateSelected,
-    this.onTimeSelected,
+    this.onStartTimeSelected,
+    this.onEndTimeSelected,
     this.onRepetitionChanged,
     required this.onSave,
     required this.onCancel,
@@ -45,15 +49,8 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     _selectedDate = widget.initialDate ?? now;
     _focusedDay = _selectedDate;
     _selectedRepetition = widget.initialRepetition;
-
-    // Initialize time values
-    _startTime = widget.initialTime;
-    if (_startTime != null) {
-      _endTime = TimeOfDay(
-        hour: _startTime!.hour + 1,
-        minute: _startTime!.minute,
-      );
-    }
+    _startTime = widget.initialStartTime;
+    _endTime = widget.initialEndTime;
 
     _quickOptions = [
       _QuickOption<DateTime>(
@@ -78,7 +75,10 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
         icon: Icons.wb_sunny,
         label: 'Afternoon',
         value: const TimeOfDay(hour: 17, minute: 0),
-        onSelected: _selectTime,
+        onSelected: (time) {
+          _selectTime(time);
+          _selectEndTime(TimeOfDay(hour: time.hour + 1, minute: time.minute));
+        },
       ),
     ];
   }
@@ -417,28 +417,46 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   }
 
   Widget _buildTimeOption() {
-    return ListTile(
-      leading: const Icon(Icons.access_time),
-      title: const Text('Time', style: TextStyle(fontWeight: FontWeight.bold)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            _startTime?.format(context) ?? 'None',
-            style: TextStyle(color: Colors.grey[600]),
+    return Column(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.access_time),
+          title: const Text('Start Time'),
+          trailing: Text(
+            _startTime?.format(context) ?? 'Not set',
+            style: TextStyle(
+              color:
+                  _startTime == null
+                      ? Colors.grey
+                      : Theme.of(context).textTheme.bodyLarge?.color,
+            ),
           ),
-          const SizedBox(width: 8),
-          if (_startTime != null)
-            IconButton(
-              icon: const Icon(Icons.close, size: 20),
-              onPressed: () => _selectTime(null),
-              padding: EdgeInsets.zero,
-            )
-          else
-            const Icon(Icons.chevron_right, size: 20),
-        ],
-      ),
-      onTap: () => _showTimePicker(isStartTime: true),
+          onTap: () => _showTimePicker(isStartTime: true),
+        ),
+        if (_startTime != null)
+          ListTile(
+            leading: const Icon(Icons.timer_outlined),
+            title: const Text('End Time'),
+            trailing: Text(
+              _endTime?.format(context) ?? 'Not set',
+              style: TextStyle(
+                color:
+                    _endTime == null
+                        ? Colors.grey
+                        : Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            ),
+            onTap: () => _showTimePicker(isStartTime: false),
+          ),
+        if (_startTime != null && _endTime != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              'Duration: ${_calculateDurationText()}',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+      ],
     );
   }
 
@@ -502,19 +520,27 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   String _calculateDurationText() {
     if (_startTime == null || _endTime == null) return 'No duration';
 
-    final start = DateTime(2023, 1, 1, _startTime!.hour, _startTime!.minute);
-    final end = DateTime(2023, 1, 1, _endTime!.hour, _endTime!.minute);
-    final difference = end.difference(start);
+    final startMinutes = _startTime!.hour * 60 + _startTime!.minute;
+    final endMinutes = _endTime!.hour * 60 + _endTime!.minute;
+    int totalMinutes;
 
-    if (difference.inMinutes == 0) return '0 minutes';
+    if (endMinutes > startMinutes) {
+      totalMinutes = endMinutes - startMinutes;
+    } else {
+      // Handle overnight duration (crossing midnight)
+      totalMinutes = (24 * 60 - startMinutes) + endMinutes;
+    }
 
-    final hours = difference.inHours;
-    final minutes = difference.inMinutes % 60;
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
 
-    if (hours == 0) return ' $minutes minutes';
-    if (minutes == 0)
-      return ' $hours ${hours == 1 ? 'hour' : 'hours'}';
-    return ' $hours ${hours == 1 ? 'hour' : 'hours'} $minutes minutes';
+    if (hours == 0) return '$minutes minutes';
+    if (minutes == 0) return '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    return '$hours ${hours == 1 ? 'hour' : 'hours'} $minutes minutes';
+  }
+
+  bool _isTimeAfter(TimeOfDay a, TimeOfDay b) {
+    return a.hour > b.hour || (a.hour == b.hour && a.minute > b.minute);
   }
 
   String _getRepetitionText(TaskRepetition repeat) {
@@ -536,21 +562,21 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     }
   }
 
-  bool _isTimeBefore(TimeOfDay a, TimeOfDay b) {
-    return a.hour < b.hour || (a.hour == b.hour && a.minute < b.minute);
-  }
-
   // Action methods
   void _selectDate(DateTime date) => setState(() => _selectedDate = date);
 
   void _selectTime(TimeOfDay? time) {
-    setState(() {
-      _startTime = time;
-      _endTime =
-          time == null
-              ? null
-              : TimeOfDay(hour: time.hour + 1, minute: time.minute);
-    });
+    setState(() => _startTime = time);
+    if (time != null && widget.onStartTimeSelected != null) {
+      widget.onStartTimeSelected!(time);
+    }
+  }
+
+  void _selectEndTime(TimeOfDay? time) {
+    setState(() => _endTime = time);
+    if (time != null && widget.onEndTimeSelected != null) {
+      widget.onEndTimeSelected!(time);
+    }
   }
 
   void _selectRepetition(TaskRepetition repetition) =>
@@ -559,7 +585,10 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
   void _handleSave() {
     widget.onDateSelected?.call(_selectedDate);
     if (_startTime != null) {
-      widget.onTimeSelected?.call(_startTime!);
+      widget.onStartTimeSelected?.call(_startTime!);
+    }
+    if (_endTime != null) {
+      widget.onEndTimeSelected?.call(_endTime!);
     }
     widget.onRepetitionChanged?.call(_selectedRepetition);
     widget.onSave();
@@ -567,16 +596,20 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
 
   Future<void> _showTimePicker({required bool isStartTime}) async {
     final now = TimeOfDay.now();
-    final initialTime =
-        isStartTime
-            ? _startTime ?? now
-            : _endTime ??
-                (_startTime != null
-                    ? TimeOfDay(
-                      hour: _startTime!.hour + 1,
-                      minute: _startTime!.minute,
-                    )
-                    : now);
+    TimeOfDay initialTime;
+
+    if (isStartTime) {
+      initialTime = _startTime ?? now;
+    } else {
+      initialTime =
+          _endTime ??
+          (_startTime != null
+              ? TimeOfDay(
+                hour: _startTime!.hour + 1,
+                minute: _startTime!.minute,
+              )
+              : now);
+    }
 
     final picked = await showTimePicker(
       context: context,
@@ -584,26 +617,24 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     );
 
     if (picked != null) {
-      setState(() {
-        if (isStartTime) {
-          _startTime = picked;
-          // Auto-adjust end time if it would be before start time
-          if (_endTime != null && _isTimeBefore(_endTime!, picked)) {
-            _endTime = TimeOfDay(hour: picked.hour + 1, minute: picked.minute);
-          } else if (_endTime == null) {
-            _endTime = TimeOfDay(hour: picked.hour + 1, minute: picked.minute);
-          }
-        } else {
-          _endTime = picked;
-          // Ensure start time exists when setting end time
-          if (_startTime == null) {
-            _startTime = TimeOfDay(
+      if (isStartTime) {
+        _selectTime(picked);
+        if (_endTime == null || !_isTimeAfter(picked, _endTime!)) {
+          _selectEndTime(
+            TimeOfDay(hour: picked.hour + 1, minute: picked.minute),
+          );
+        }
+      } else {
+        _selectEndTime(picked);
+        if (_startTime == null) {
+          _selectTime(
+            TimeOfDay(
               hour: picked.hour > 0 ? picked.hour - 1 : 0,
               minute: picked.minute,
-            );
-          }
+            ),
+          );
         }
-      });
+      }
     }
   }
 

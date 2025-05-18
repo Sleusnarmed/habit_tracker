@@ -40,10 +40,10 @@ class Task {
   final DateTime? dueDate;
 
   @HiveField(7)
-  final TimeOfDay? startTime; // Renamed from dueTime for clarity
+  final TimeOfDay? startTime;
 
   @HiveField(8)
-  final Duration? duration;
+  final TimeOfDay? endTime;
 
   @HiveField(9)
   final TaskRepetition repetition;
@@ -57,50 +57,54 @@ class Task {
     this.priority = TaskPriority.none,
     this.dueDate,
     this.startTime,
-    this.duration,
+    this.endTime,
     this.repetition = TaskRepetition.never,
   }) {
-    // Validate that duration doesn't cross midnight when date and time are provided
-    if (hasDuration) {
-      if (endDateTime!.day != startDateTime!.day) {
-        throw ArgumentError(
-          'Task duration cannot cross midnight to another day',
-        );
+    // Validate time consistency
+    if (startTime != null && endTime != null) {
+      if (!_isTimeAfter(startTime!, endTime!)) {
+        throw ArgumentError('End time must be after start time');
       }
     }
   }
 
-  /// Returns true if this task has both start time and duration
-  bool get hasDuration => startTime != null && duration != null;
+  /// Returns true if this task has both start and end times
+  bool get hasTimeRange => startTime != null && endTime != null;
 
-  /// Returns true if this task has a specific time (without duration)
-  bool get hasTime => startTime != null && duration == null;
+  /// Returns true if this task has only start time
+  bool get hasSingleTime => startTime != null && endTime == null;
 
   /// Returns the start DateTime (combination of dueDate and startTime)
   DateTime? get startDateTime {
     if (dueDate == null) return null;
+    final localDate = dueDate!.toLocal();
     if (startTime == null)
-      return DateTime(dueDate!.year, dueDate!.month, dueDate!.day);
+      return DateTime(localDate.year, localDate.month, localDate.day);
     return DateTime(
-      dueDate!.year,
-      dueDate!.month,
-      dueDate!.day,
+      localDate.year,
+      localDate.month,
+      localDate.day,
       startTime!.hour,
       startTime!.minute,
     );
   }
 
-  /// Returns the end DateTime (startDateTime + duration)
+  /// Returns the end DateTime (combination of dueDate and endTime)
   DateTime? get endDateTime {
-    if (!hasDuration) return null;
-    return startDateTime!.add(duration!);
+    if (dueDate == null || endTime == null) return null;
+    return DateTime(
+      dueDate!.year,
+      dueDate!.month,
+      dueDate!.day,
+      endTime!.hour,
+      endTime!.minute,
+    );
   }
 
-  /// Returns the end TimeOfDay
-  TimeOfDay? get endTime {
-    if (!hasDuration) return null;
-    final end = endDateTime!;
-    return TimeOfDay(hour: end.hour, minute: end.minute);
+  /// Calculated duration based on start and end times
+  Duration? get duration {
+    if (!hasTimeRange) return null;
+    return _calculateDuration(startTime!, endTime!);
   }
 
   Task copyWith({
@@ -112,7 +116,7 @@ class Task {
     TaskPriority? priority,
     DateTime? dueDate,
     TimeOfDay? startTime,
-    Duration? duration,
+    TimeOfDay? endTime,
     TaskRepetition? repetition,
   }) {
     return Task(
@@ -124,24 +128,25 @@ class Task {
       priority: priority ?? this.priority,
       dueDate: dueDate ?? this.dueDate,
       startTime: startTime ?? this.startTime,
-      duration: duration ?? this.duration,
+      endTime: endTime ?? this.endTime,
       repetition: repetition ?? this.repetition,
     );
   }
 
-  /// Formatted time range (e.g., "7:00 PM - 8:00 PM")
+  /// Formatted time range 
   String? get formattedTimeRange {
-    if (!hasDuration) {
+    if (!hasTimeRange) {
       if (startTime == null) return null;
       return _formatTimeOfDay(startTime!);
     }
     return '${_formatTimeOfDay(startTime!)} - ${_formatTimeOfDay(endTime!)}';
   }
 
-  /// Formatted duration in hours and minutes (e.g., "1h 30m")
+  /// Formatted duration in hours and minutes 
   String? get formattedDuration {
-    if (duration == null) return null;
-    return '${duration!.inHours}h ${duration!.inMinutes.remainder(60)}m';
+    if (!hasTimeRange) return null;
+    final dur = duration!;
+    return '${dur.inHours}h ${dur.inMinutes.remainder(60)}m';
   }
 
   String get formattedDueDate {
@@ -152,15 +157,39 @@ class Task {
 
   bool get isDueToday {
     if (dueDate == null) return false;
+
     final now = DateTime.now();
-    return dueDate!.year == now.year &&
-        dueDate!.month == now.month &&
-        dueDate!.day == now.day;
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDay = DateTime(dueDate!.year, dueDate!.month, dueDate!.day);
+
+    if (dueDay == today) return true;
+
+    switch (repetition) {
+      case TaskRepetition.daily:
+        return true;
+      case TaskRepetition.weekdays:
+        return now.weekday >= DateTime.monday && now.weekday <= DateTime.friday;
+      case TaskRepetition.weekends:
+        return now.weekday == DateTime.saturday ||
+            now.weekday == DateTime.sunday;
+      case TaskRepetition.weekly:
+        return dueDate!.weekday == now.weekday;
+      case TaskRepetition.monthly:
+       
+        if (dueDate!.day > now.day && now.month == DateTime.december) {
+          return false; 
+        }
+        return dueDate!.day == now.day;
+      case TaskRepetition.yearly:
+        return dueDate!.month == now.month && dueDate!.day == now.day;
+      case TaskRepetition.never:
+      default:
+        return false;
+    }
   }
 
-  /// Checks if the given time falls within this task's duration
   bool isTimeWithinDuration(TimeOfDay time) {
-    if (!hasDuration) return false;
+    if (!hasTimeRange) return false;
 
     final timeInMinutes = time.hour * 60 + time.minute;
     final startInMinutes = startTime!.hour * 60 + startTime!.minute;
@@ -169,7 +198,24 @@ class Task {
     return timeInMinutes >= startInMinutes && timeInMinutes <= endInMinutes;
   }
 
-  /// Helper method to format TimeOfDay
+  // Helper method to check if time b is after time a
+  bool _isTimeAfter(TimeOfDay a, TimeOfDay b) {
+    return b.hour > a.hour || (b.hour == a.hour && b.minute > a.minute);
+  }
+
+  // Helper method to calculate duration between two times
+  Duration _calculateDuration(TimeOfDay start, TimeOfDay end) {
+    final startMinutes = start.hour * 60 + start.minute;
+    final endMinutes = end.hour * 60 + end.minute;
+
+    if (endMinutes > startMinutes) {
+      return Duration(minutes: endMinutes - startMinutes);
+    } else {
+      return Duration(minutes: (24 * 60 - startMinutes) + endMinutes);
+    }
+  }
+
+  // Helper method to format TimeOfDay
   String _formatTimeOfDay(TimeOfDay time) {
     final now = DateTime.now();
     final dt = DateTime(now.year, now.month, now.day, time.hour, time.minute);
@@ -177,11 +223,18 @@ class Task {
   }
 
   static void registerAdapters() {
-    Hive.registerAdapter(TaskAdapter());
-    Hive.registerAdapter(TaskPriorityAdapter());
-    Hive.registerAdapter(TaskRepetitionAdapter());
-    Hive.registerAdapter(TimeOfDayAdapter());
-    Hive.registerAdapter(DurationAdapter());
+    if (!Hive.isAdapterRegistered(0)) {
+      Hive.registerAdapter(TaskAdapter());
+    }
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(TaskPriorityAdapter());
+    }
+    if (!Hive.isAdapterRegistered(2)) {
+      Hive.registerAdapter(TaskRepetitionAdapter());
+    }
+    if (!Hive.isAdapterRegistered(3)) {
+      Hive.registerAdapter(TimeOfDayAdapter());
+    }
   }
 }
 
@@ -223,6 +276,9 @@ class TimeOfDayAdapter extends TypeAdapter<TimeOfDay> {
   TimeOfDay read(BinaryReader reader) {
     final hour = reader.readByte();
     final minute = reader.readByte();
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return const TimeOfDay(hour: 0, minute: 0);
+    }
     return TimeOfDay(hour: hour, minute: minute);
   }
 
@@ -230,21 +286,5 @@ class TimeOfDayAdapter extends TypeAdapter<TimeOfDay> {
   void write(BinaryWriter writer, TimeOfDay obj) {
     writer.writeByte(obj.hour);
     writer.writeByte(obj.minute);
-  }
-}
-
-class DurationAdapter extends TypeAdapter<Duration> {
-  @override
-  final int typeId = 4;
-
-  @override
-  Duration read(BinaryReader reader) {
-    final microseconds = reader.readInt();
-    return Duration(microseconds: microseconds);
-  }
-
-  @override
-  void write(BinaryWriter writer, Duration obj) {
-    writer.writeInt(obj.inMicroseconds);
   }
 }
