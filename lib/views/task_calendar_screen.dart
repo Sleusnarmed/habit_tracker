@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:habit_tracker/widgets/calendarScreen/list_view.dart';
+import 'package:habit_tracker/widgets/calendarScreen/month_view.dart';
+import 'package:habit_tracker/widgets/calendarScreen/day_view.dart';
+import 'package:habit_tracker/widgets/calendarScreen/three_day_view.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
+import 'package:habit_tracker/widgets/calendarScreen/weekly_view.dart';
 import 'package:intl/intl.dart';
 import '../models/task.dart';
 
@@ -15,6 +20,8 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   late CalendarController _calendarController;
   late Box<Task> _tasksBox;
   bool _isLoading = true;
+  bool _showQuickOptions = false;
+  String _currentView = 'List';
 
   @override
   void initState() {
@@ -38,204 +45,124 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Task Calendar'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.today),
-            onPressed: () {
-              _calendarController.displayDate = DateTime.now();
-            },
-          ),
-          PopupMenuButton<CalendarView>(
-            icon: const Icon(Icons.calendar_view_day),
-            onSelected: (view) {
-              _calendarController.view = view;
-            },
-            itemBuilder:
-                (context) => [
-                  const PopupMenuItem(
-                    value: CalendarView.day,
-                    child: Text('Day View'),
-                  ),
-                  const PopupMenuItem(
-                    value: CalendarView.week,
-                    child: Text('Week View'),
-                  ),
-                  const PopupMenuItem(
-                    value: CalendarView.month,
-                    child: Text('Month View'),
-                  ),
-                  const PopupMenuItem(
-                    value: CalendarView.workWeek,
-                    child: Text('Work Week'),
-                  ),
-                ],
-          ),
-        ],
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              DateFormat(
+                'MMMM yyyy',
+              ).format(_calendarController.displayDate ?? DateTime.now()),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              icon: const Text(":", style: TextStyle(fontSize: 24)),
+              onPressed: () {
+                setState(() {
+                  _showQuickOptions = !_showQuickOptions;
+                });
+              },
+            ),
+          ],
+        ),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
       ),
       body:
           _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : SfCalendar(
-                controller: _calendarController,
-                view: CalendarView.day,
-                timeSlotViewSettings: const TimeSlotViewSettings(
-                  timeInterval: Duration(minutes: 60),
-                  timeFormat: 'h a',
-                  timeRulerSize: 60,
-                  timeTextStyle: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                dataSource: TaskDataSource(_getAppointments()),
-                monthViewSettings: const MonthViewSettings(
-                  appointmentDisplayMode:
-                      MonthAppointmentDisplayMode.appointment,
-                  showAgenda: true,
-                ),
-                appointmentBuilder: _appointmentBuilder,
-                onTap: (CalendarTapDetails details) {
-                  if (details.appointments != null &&
-                      details.appointments!.isNotEmpty) {
-                    _showTaskDetails(details.appointments!.first as Task);
-                  }
-                },
+              : Column(
+                children: [
+                  if (_showQuickOptions)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildViewOption('List'),
+                          _buildViewOption('Month'),
+                          _buildViewOption('Day'),
+                          _buildViewOption('3 Days'),
+                          _buildViewOption('Weekly'),
+                        ],
+                      ),
+                    ),
+                  Expanded(child: _buildCurrentView()),
+                ],
               ),
     );
   }
 
-  List<Task> _getAppointments() {
-    return _tasksBox.values.where((task) => task.dueDate != null).toList();
-  }
-
-  Widget _appointmentBuilder(
-    BuildContext context,
-    CalendarAppointmentDetails details,
-  ) {
-    final Task task = details.appointments.first as Task;
-    return Container(
-      decoration: BoxDecoration(
-        color: _getPriorityColor(task.priority).withOpacity(0.8),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Center(
+  Widget _buildViewOption(String viewName) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _currentView = viewName;
+          _showQuickOptions = false;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              _currentView == viewName
+                  ? Colors.orange.withOpacity(0.2)
+                  : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
         child: Text(
-          task.title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+          viewName,
+          style: TextStyle(
+            color: _currentView == viewName ? Colors.orange : Colors.black,
+            fontWeight:
+                _currentView == viewName ? FontWeight.bold : FontWeight.normal,
           ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
         ),
       ),
     );
   }
 
-  Color _getPriorityColor(TaskPriority priority) {
-    switch (priority) {
-      case TaskPriority.high:
-        return Colors.red;
-      case TaskPriority.medium:
-        return Colors.orange;
-      case TaskPriority.low:
-        return Colors.green;
-      case TaskPriority.none:
-        return Colors.blue;
+  Widget _buildCurrentView() {
+    switch (_currentView) {
+      case 'List':
+        return TaskListView(
+          calendarController: _calendarController,
+          tasksBox: _tasksBox,
+          selectedDate: _calendarController.displayDate ?? DateTime.now(),
+        );
+      case 'Month':
+        return MonthView(
+          calendarController: _calendarController,
+          tasks: _getAppointments(),
+        );
+      case 'Day':
+        return DayView(
+          calendarController: _calendarController,
+          tasks: _getAppointments(),
+        );
+      case '3 Days':
+        return ThreeDayView(
+          calendarController: _calendarController,
+          tasks: _getAppointments(),
+        );
+      case 'Weekly':
+        return WeeklyView(
+          calendarController: _calendarController,
+          appointments: _getAppointments(),
+          onTaskTap: (task) {
+            print('Task tapped: ${task.title}');
+          },
+        );
+      default:
+        return TaskListView(
+          calendarController: _calendarController,
+          tasksBox: _tasksBox,
+          selectedDate: _calendarController.displayDate ?? DateTime.now(),
+        );
     }
   }
 
-  void _showTaskDetails(Task task) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text(task.title),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (task.description.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Text(task.description),
-                  ),
-                if (task.startTime != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4.0),
-                    child: Text(
-                      'Time: ${task.formattedTimeRange}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                Text(
-                  'Category: ${task.category}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Priority: ${task.priority.toString().split('.').last}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                if (task.repetition != TaskRepetition.never)
-                  Text(
-                    'Repeats: ${task.repetition.toString().split('.').last}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-    );
-  }
-}
-
-class TaskDataSource extends CalendarDataSource {
-  TaskDataSource(List<Task> tasks) {
-    appointments = tasks;
-  }
-
-  @override
-  DateTime getStartTime(int index) {
-    return _getTask(index).startDateTime!;
-  }
-
-  @override
-  DateTime getEndTime(int index) {
-    return _getTask(index).endDateTime ??
-        _getTask(index).startDateTime!.add(const Duration(hours: 1));
-  }
-
-  @override
-  String getSubject(int index) {
-    return _getTask(index).title;
-  }
-
-  @override
-  Color getColor(int index) {
-    return _getPriorityColor(_getTask(index).priority);
-  }
-
-  Task _getTask(int index) {
-    return appointments![index] as Task;
-  }
-
-  Color _getPriorityColor(TaskPriority priority) {
-    switch (priority) {
-      case TaskPriority.high:
-        return Colors.red;
-      case TaskPriority.medium:
-        return Colors.orange;
-      case TaskPriority.low:
-        return Colors.green;
-      case TaskPriority.none:
-        return Colors.blue;
-    }
+  List<Task> _getAppointments() {
+    return _tasksBox.values.where((task) => task.dueDate != null).toList();
   }
 }

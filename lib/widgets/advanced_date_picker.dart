@@ -77,7 +77,6 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
         value: const TimeOfDay(hour: 17, minute: 0),
         onSelected: (time) {
           _selectTime(time);
-          _selectEndTime(TimeOfDay(hour: time.hour + 1, minute: time.minute));
         },
       ),
     ];
@@ -436,7 +435,7 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
         if (_startTime != null)
           ListTile(
             leading: const Icon(Icons.timer_outlined),
-            title: const Text('End Time'),
+            title: const Text('End Time (optional)'),
             trailing: Text(
               _endTime?.format(context) ?? 'Not set',
               style: TextStyle(
@@ -539,10 +538,6 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     return '$hours ${hours == 1 ? 'hour' : 'hours'} $minutes minutes';
   }
 
-  bool _isTimeAfter(TimeOfDay a, TimeOfDay b) {
-    return a.hour > b.hour || (a.hour == b.hour && a.minute > b.minute);
-  }
-
   String _getRepetitionText(TaskRepetition repeat) {
     switch (repeat) {
       case TaskRepetition.daily:
@@ -601,14 +596,13 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     if (isStartTime) {
       initialTime = _startTime ?? now;
     } else {
-      initialTime =
-          _endTime ??
-          (_startTime != null
-              ? TimeOfDay(
-                hour: _startTime!.hour + 1,
-                minute: _startTime!.minute,
-              )
-              : now);
+      // Only allow end time selection if start time exists
+      if (_startTime == null) {
+        // If no start time, show start time picker first
+        await _showTimePicker(isStartTime: true);
+        return;
+      }
+      initialTime = _endTime ?? _startTime!;
     }
 
     final picked = await showTimePicker(
@@ -619,21 +613,9 @@ class _AdvancedDatePickerState extends State<AdvancedDatePicker> {
     if (picked != null) {
       if (isStartTime) {
         _selectTime(picked);
-        if (_endTime == null || !_isTimeAfter(picked, _endTime!)) {
-          _selectEndTime(
-            TimeOfDay(hour: picked.hour + 1, minute: picked.minute),
-          );
-        }
+        // Don't automatically set end time
       } else {
         _selectEndTime(picked);
-        if (_startTime == null) {
-          _selectTime(
-            TimeOfDay(
-              hour: picked.hour > 0 ? picked.hour - 1 : 0,
-              minute: picked.minute,
-            ),
-          );
-        }
       }
     }
   }
