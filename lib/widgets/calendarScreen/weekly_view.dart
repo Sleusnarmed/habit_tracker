@@ -8,11 +8,11 @@ class WeeklyView extends StatelessWidget {
   final void Function(Task) onTaskTap;
 
   const WeeklyView({
-    Key? key,
+    super.key,
     required this.calendarController,
     required this.appointments,
     required this.onTaskTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

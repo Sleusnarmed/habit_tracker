@@ -10,10 +10,10 @@ class DayView extends StatelessWidget {
   final List<Task> tasks;
 
   const DayView({
-    Key? key,
+    super.key,
     required this.calendarController,
     required this.tasks,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

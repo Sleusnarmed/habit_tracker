@@ -15,17 +15,17 @@ class TaskListView extends StatefulWidget {
   final Function(Task) onTaskDeleted;
 
   const TaskListView({
-    Key? key,
+    super.key,
     required this.calendarController,
     required this.tasksBox,
     required this.selectedDate,
     required this.categories,
     required this.onTaskUpdated,
     required this.onTaskDeleted,
-  }) : super(key: key);
+  });
 
   @override
-  _TaskListViewState createState() => _TaskListViewState();
+  State<TaskListView> createState() => _TaskListViewState();
 }
 
 class _TaskListViewState extends State<TaskListView> {

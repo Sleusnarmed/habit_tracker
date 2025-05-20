@@ -13,12 +13,12 @@ class TaskCalendarScreen extends StatefulWidget {
   final List<String> categories;
   
   const TaskCalendarScreen({
-    Key? key,
+    super.key,
     this.categories  = const [],
-  }) : super(key: key);
+  });
 
   @override
-  _TaskCalendarScreenState createState() => _TaskCalendarScreenState();
+  State<TaskCalendarScreen> createState() => _TaskCalendarScreenState();
 }
 
 class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
