@@ -17,7 +17,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
   final PageController _pageController = PageController(initialPage: 0);
   final List<double> _iconScales = [1.05, 1.05, 1.05, 1.05, 1.05]; // Scale factors for each icon
 
-  final List<Widget> _pages = const [
+  final List<Widget> _pages = [
     TaskListView(),
     TaskCalendarScreen(),
     MatrixView(),

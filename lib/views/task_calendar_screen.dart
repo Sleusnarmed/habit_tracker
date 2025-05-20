@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:habit_tracker/services/calendar_preferences.dart';
 import 'package:hive/hive.dart';
 import 'package:habit_tracker/widgets/calendarScreen/list_view.dart';
 import 'package:habit_tracker/widgets/calendarScreen/month_view.dart';
@@ -11,11 +12,8 @@ import '../models/task.dart';
 
 class TaskCalendarScreen extends StatefulWidget {
   final List<String> categories;
-  
-  const TaskCalendarScreen({
-    super.key,
-    this.categories  = const [],
-  });
+
+  const TaskCalendarScreen({super.key, this.categories = const []});
 
   @override
   State<TaskCalendarScreen> createState() => _TaskCalendarScreenState();
@@ -26,7 +24,7 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   late Box<Task> _tasksBox;
   bool _isLoading = true;
   bool _showQuickOptions = false;
-  String _currentView = 'List';
+  String _currentView = CalendarPreferences.currentView;
 
   @override
   void initState() {
@@ -64,8 +62,9 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              DateFormat('MMMM yyyy').format(
-                  _calendarController.displayDate ?? DateTime.now()),
+              DateFormat(
+                'MMMM yyyy',
+              ).format(_calendarController.displayDate ?? DateTime.now()),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             IconButton(
@@ -82,39 +81,38 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                if (_showQuickOptions)
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                children: [
+                  if (_showQuickOptions)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildViewOption('List'),
+                          _buildViewOption('Month'),
+                          _buildViewOption('Day'),
+                          _buildViewOption('3 Days'),
+                          _buildViewOption('Weekly'),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildViewOption('List'),
-                        _buildViewOption('Month'),
-                        _buildViewOption('Day'),
-                        _buildViewOption('3 Days'),
-                        _buildViewOption('Weekly'),
-                      ],
-                    ),
-                  ),
-                Expanded(
-                  child: _buildCurrentView(),
-                ),
-              ],
-            ),
+                  Expanded(child: _buildCurrentView()),
+                ],
+              ),
     );
   }
 
@@ -123,9 +121,8 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
       onTap: () {
         setState(() {
           _currentView = viewName;
+          CalendarPreferences.currentView = viewName; // Persist the change
           _showQuickOptions = false;
-          
-          // Update calendar view if not List view
           if (viewName != 'List') {
             _calendarController.view = _getCalendarView(viewName);
           }
@@ -134,9 +131,10 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: _currentView == viewName
-              ? Colors.orange.withOpacity(0.2)
-              : Colors.transparent,
+          color:
+              _currentView == viewName
+                  ? Colors.orange.withOpacity(0.2)
+                  : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -144,7 +142,8 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           style: TextStyle(
             fontSize: 14,
             color: _currentView == viewName ? Colors.orange : Colors.black,
-            fontWeight: _currentView == viewName ? FontWeight.bold : FontWeight.normal,
+            fontWeight:
+                _currentView == viewName ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ),
@@ -168,7 +167,7 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   Widget _buildCurrentView() {
     final appointments = _getAppointments();
     final currentDate = _calendarController.displayDate ?? DateTime.now();
-    
+
     switch (_currentView) {
       case 'List':
         return TaskListView(
@@ -188,7 +187,9 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
       case 'Day':
         return DayView(
           calendarController: _calendarController,
-          tasks: appointments,
+          appointments: appointments, 
+          onTaskTap: (task) {
+          },
           key: ValueKey('DayView-$currentDate'),
         );
       case '3 Days':
@@ -202,7 +203,6 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           calendarController: _calendarController,
           appointments: appointments,
           onTaskTap: (task) {
-            // Handle task tap in weekly view if needed
           },
           key: ValueKey('WeeklyView-$currentDate'),
         );
