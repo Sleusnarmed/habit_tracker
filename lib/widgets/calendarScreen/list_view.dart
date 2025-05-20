@@ -37,16 +37,13 @@ class _TaskListViewState extends State<TaskListView> {
   late DateTime _currentWeekStart;
   DateTime? _displayDate;
   var _pageController = PageController();
-  double _startDragPosition = 0;
-  double _dragDistance = 0;
-
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _displayDate = widget.selectedDate;
     _currentWeekStart = _getWeekStart(widget.selectedDate);
-    _pageController = PageController(initialPage: 1); // Start at current week
+    _pageController = PageController(initialPage: 1, viewportFraction: 1.0);
   }
 
   @override
@@ -172,77 +169,19 @@ class _TaskListViewState extends State<TaskListView> {
   Widget _buildWeekHeader() {
     return SizedBox(
       height: 60,
-      child: PageView.builder(
+      child: PageView(
         controller: _pageController,
-        // Allow infinite weeks in both directions
-        itemBuilder: (context, pageIndex) {
-          // Calculate the week start based on page index
-          final weeksFromCurrent = pageIndex - 1;
-          final weekStart = _currentWeekStart.add(
-            Duration(days: weeksFromCurrent * 7),
-          );
-          final weekDays = _getWeekDays(weekStart);
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children:
-                  weekDays.map((day) {
-                    final isSelected = isSameDay(
-                      day,
-                      _displayDate ?? widget.selectedDate,
-                    );
-                    return Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        decoration: BoxDecoration(
-                          color:
-                              isSelected ? Colors.orange : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: InkWell(
-                          onTap: () => _handleDateChange(day),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                DateFormat('E').format(day),
-                                style: TextStyle(
-                                  color:
-                                      isSelected ? Colors.white : Colors.grey,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                day.day.toString(),
-                                style: TextStyle(
-                                  color:
-                                      isSelected ? Colors.white : Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-            ),
-          );
-        },
+        scrollDirection: Axis.horizontal,
+        physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
         onPageChanged: (index) {
-          final weeksFromCurrent = index - 1;
+          // Calculate the week offset (1 = next week, -1 = previous week)
+          final weekOffset = index > 1 ? 1 : (index < 1 ? -1 : 0);
           final newWeekStart = _currentWeekStart.add(
-            Duration(days: weeksFromCurrent * 7),
+            Duration(days: weekOffset * 7),
           );
 
           setState(() {
             _currentWeekStart = newWeekStart;
-            // Keep the same weekday selection
             final daysInWeek = _getWeekDays(newWeekStart);
             final currentWeekday =
                 (_displayDate ?? widget.selectedDate).weekday % 7;
@@ -251,8 +190,68 @@ class _TaskListViewState extends State<TaskListView> {
               orElse: () => daysInWeek.first,
             );
             widget.calendarController.displayDate = _displayDate!;
+            if (index != 1) {
+              _pageController.jumpToPage(1);
+            }
           });
         },
+        children: [
+          _buildWeekHeaderPage(_currentWeekStart.add(const Duration(days: -7))),
+          _buildWeekHeaderPage(_currentWeekStart),
+          _buildWeekHeaderPage(_currentWeekStart.add(const Duration(days: 7))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekHeaderPage(DateTime weekStart) {
+    final weekDays = _getWeekDays(weekStart);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children:
+            weekDays.map((day) {
+              final isSelected = isSameDay(
+                day,
+                _displayDate ?? widget.selectedDate,
+              );
+              return Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.orange : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: InkWell(
+                    onTap: () => _handleDateChange(day),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          DateFormat('E').format(day),
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.grey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          day.day.toString(),
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.black,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
       ),
     );
   }
@@ -396,7 +395,6 @@ class _TaskListViewState extends State<TaskListView> {
   }
 
   @override
-  // Replace the build method in _TaskListViewState with this:
   Widget build(BuildContext context) {
     final displayDate = _displayDate ?? widget.selectedDate;
     final tasksForSelectedDay = _getTasksForDay(displayDate);
@@ -421,13 +419,12 @@ class _TaskListViewState extends State<TaskListView> {
         Expanded(
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
-              // Disable swipe up/down in task area
-              return true; // Block further propagation
+              return true; 
             },
             child: ListView(
               controller: _scrollController,
               physics:
-                  const ClampingScrollPhysics(), // More controlled scrolling
+                  const ClampingScrollPhysics(), 
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
                 if (tasksForSelectedDay.isEmpty)
