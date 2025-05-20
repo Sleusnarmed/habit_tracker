@@ -25,6 +25,8 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   bool _isLoading = true;
   bool _showQuickOptions = false;
   String _currentView = CalendarPreferences.currentView;
+  double _dragDistance = 0;
+  bool _showCalendar = true;
 
   @override
   void initState() {
@@ -62,9 +64,8 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              DateFormat(
-                'MMMM yyyy',
-              ).format(_calendarController.displayDate ?? DateTime.now()),
+              DateFormat('MMMM yyyy').format(
+                  _calendarController.displayDate ?? DateTime.now()),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             IconButton(
@@ -81,38 +82,78 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _currentView == 'List'
+              ? GestureDetector(
+                  onVerticalDragStart: (_) => _dragDistance = 0,
+                  onVerticalDragUpdate: (details) {
+                    if (details.delta.dy.abs() > details.delta.dx.abs()) {
+                      _dragDistance += details.delta.dy;
+                    }
+                  },
+                  onVerticalDragEnd: (_) {
+                    if (_dragDistance < -50 && _showCalendar) {
+                      setState(() => _showCalendar = false);
+                    } else if (_dragDistance > 50 && !_showCalendar) {
+                      setState(() => _showCalendar = true);
+                    }
+                    _dragDistance = 0;
+                  },
+                  child: Column(
+                    children: [
+                      if (_showQuickOptions)
+                        _buildQuickOptionsContainer(),
+                      Expanded(
+                        child: TaskListView(
+                          calendarController: _calendarController,
+                          tasksBox: _tasksBox,
+                          selectedDate: _calendarController.displayDate ?? DateTime.now(),
+                          categories: widget.categories,
+                          onTaskUpdated: _updateTask,
+                          onTaskDeleted: _deleteTask,
+                          showCalendar: _showCalendar,
+                          onCalendarVisibilityChanged: (visible) {
+                            setState(() => _showCalendar = visible);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                )
               : Column(
-                children: [
-                  if (_showQuickOptions)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildViewOption('List'),
-                          _buildViewOption('Month'),
-                          _buildViewOption('Day'),
-                          _buildViewOption('3 Days'),
-                          _buildViewOption('Weekly'),
-                        ],
-                      ),
-                    ),
-                  Expanded(child: _buildCurrentView()),
-                ],
-              ),
+                  children: [
+                    if (_showQuickOptions)
+                      _buildQuickOptionsContainer(),
+                    Expanded(child: _buildCurrentView()),
+                  ],
+                ),
+    );
+  }
+
+  Widget _buildQuickOptionsContainer() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildViewOption('List'),
+          _buildViewOption('Month'),
+          _buildViewOption('Day'),
+          _buildViewOption('3 Days'),
+          _buildViewOption('Weekly'),
+        ],
+      ),
     );
   }
 
@@ -121,20 +162,20 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
       onTap: () {
         setState(() {
           _currentView = viewName;
-          CalendarPreferences.currentView = viewName; // Persist the change
+          CalendarPreferences.currentView = viewName;
           _showQuickOptions = false;
           if (viewName != 'List') {
             _calendarController.view = _getCalendarView(viewName);
+            _showCalendar = true; // Reset calendar visibility when switching views
           }
         });
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color:
-              _currentView == viewName
-                  ? Colors.orange.withOpacity(0.2)
-                  : Colors.transparent,
+          color: _currentView == viewName
+              ? Colors.orange.withOpacity(0.2)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -177,6 +218,10 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           categories: widget.categories,
           onTaskUpdated: _updateTask,
           onTaskDeleted: _deleteTask,
+          showCalendar: _showCalendar,
+          onCalendarVisibilityChanged: (visible) {
+            setState(() => _showCalendar = visible);
+          },
         );
       case 'Month':
         return MonthView(
@@ -187,9 +232,8 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
       case 'Day':
         return DayView(
           calendarController: _calendarController,
-          appointments: appointments, 
-          onTaskTap: (task) {
-          },
+          appointments: appointments,
+          onTaskTap: (task) {},
           key: ValueKey('DayView-$currentDate'),
         );
       case '3 Days':
@@ -202,8 +246,7 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
         return WeeklyView(
           calendarController: _calendarController,
           appointments: appointments,
-          onTaskTap: (task) {
-          },
+          onTaskTap: (task) {},
           key: ValueKey('WeeklyView-$currentDate'),
         );
       default:
@@ -214,6 +257,10 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           categories: widget.categories,
           onTaskUpdated: _updateTask,
           onTaskDeleted: _deleteTask,
+          showCalendar: _showCalendar,
+          onCalendarVisibilityChanged: (visible) {
+            setState(() => _showCalendar = visible);
+          },
         );
     }
   }
