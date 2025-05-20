@@ -10,7 +10,12 @@ import 'package:intl/intl.dart';
 import '../models/task.dart';
 
 class TaskCalendarScreen extends StatefulWidget {
-  const TaskCalendarScreen({Key? key}) : super(key: key);
+  final List<String> categories;
+  
+  const TaskCalendarScreen({
+    Key? key,
+    this.categories  = const [],
+  }) : super(key: key);
 
   @override
   _TaskCalendarScreenState createState() => _TaskCalendarScreenState();
@@ -35,6 +40,16 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
     setState(() => _isLoading = false);
   }
 
+  Future<void> _updateTask(Task updatedTask) async {
+    await _tasksBox.put(updatedTask.id, updatedTask);
+    setState(() {});
+  }
+
+  Future<void> _deleteTask(Task task) async {
+    await _tasksBox.delete(task.id);
+    setState(() {});
+  }
+
   @override
   void dispose() {
     _calendarController.dispose();
@@ -54,7 +69,7 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             IconButton(
-              icon: const Text(":", style: TextStyle(fontSize: 24)),
+              icon: const Icon(Icons.more_vert),
               onPressed: () {
                 setState(() {
                   _showQuickOptions = !_showQuickOptions;
@@ -74,6 +89,16 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
                 if (_showQuickOptions)
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -100,27 +125,14 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           _currentView = viewName;
           _showQuickOptions = false;
           
-          // Update the calendar controller's view based on selection
-          switch (viewName) {
-            case 'Month':
-              _calendarController.view = CalendarView.month;
-              break;
-            case 'Day':
-              _calendarController.view = CalendarView.day;
-              break;
-            case '3 Days':
-              _calendarController.view = CalendarView.week;
-              break;
-            case 'Weekly':
-              _calendarController.view = CalendarView.week;
-              break;
-            case 'List':
-              break;
+          // Update calendar view if not List view
+          if (viewName != 'List') {
+            _calendarController.view = _getCalendarView(viewName);
           }
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: _currentView == viewName
               ? Colors.orange.withOpacity(0.2)
@@ -130,58 +142,78 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
         child: Text(
           viewName,
           style: TextStyle(
+            fontSize: 14,
             color: _currentView == viewName ? Colors.orange : Colors.black,
-            fontWeight:
-                _currentView == viewName ? FontWeight.bold : FontWeight.normal,
+            fontWeight: _currentView == viewName ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ),
     );
   }
 
+  CalendarView _getCalendarView(String viewName) {
+    switch (viewName) {
+      case 'Month':
+        return CalendarView.month;
+      case 'Day':
+        return CalendarView.day;
+      case '3 Days':
+      case 'Weekly':
+        return CalendarView.week;
+      default:
+        return CalendarView.month;
+    }
+  }
+
   Widget _buildCurrentView() {
-    // Always get fresh appointments when building the view
     final appointments = _getAppointments();
+    final currentDate = _calendarController.displayDate ?? DateTime.now();
     
     switch (_currentView) {
       case 'List':
         return TaskListView(
           calendarController: _calendarController,
           tasksBox: _tasksBox,
-          selectedDate: _calendarController.displayDate ?? DateTime.now(),
+          selectedDate: currentDate,
+          categories: widget.categories,
+          onTaskUpdated: _updateTask,
+          onTaskDeleted: _deleteTask,
         );
       case 'Month':
         return MonthView(
           calendarController: _calendarController,
           tasks: appointments,
-          key: ValueKey('MonthView-${_calendarController.displayDate}'), 
+          key: ValueKey('MonthView-$currentDate'),
         );
       case 'Day':
         return DayView(
           calendarController: _calendarController,
           tasks: appointments,
-          key: ValueKey('DayView-${_calendarController.displayDate}'),
+          key: ValueKey('DayView-$currentDate'),
         );
       case '3 Days':
         return ThreeDayView(
           calendarController: _calendarController,
           tasks: appointments,
-          key: ValueKey('ThreeDayView-${_calendarController.displayDate}'), 
+          key: ValueKey('ThreeDayView-$currentDate'),
         );
       case 'Weekly':
         return WeeklyView(
           calendarController: _calendarController,
           appointments: appointments,
           onTaskTap: (task) {
-            print('Task tapped: ${task.title}');
+            // Handle task tap in weekly view if needed
           },
-          key: ValueKey('WeeklyView-${_calendarController.displayDate}'), 
+          key: ValueKey('WeeklyView-$currentDate'),
         );
       default:
         return TaskListView(
           calendarController: _calendarController,
           tasksBox: _tasksBox,
-          selectedDate: _calendarController.displayDate ?? DateTime.now(),
+          selectedDate: currentDate,
+          categories: widget.categories,
+          onTaskUpdated: _updateTask,
+          onTaskDeleted: _deleteTask,
         );
     }
   }
