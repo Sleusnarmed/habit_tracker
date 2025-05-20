@@ -24,13 +24,24 @@ class _TaskListViewState extends State<TaskListView> {
   late ScrollController _scrollController;
   bool _showCalendar = true;
   late DateTime _currentWeekStart;
+  DateTime? _displayDate;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _displayDate = widget.selectedDate;
     _currentWeekStart = _getWeekStart(widget.selectedDate);
     _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant TaskListView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedDate != oldWidget.selectedDate) {
+      _displayDate = widget.selectedDate;
+      _currentWeekStart = _getWeekStart(widget.selectedDate);
+    }
   }
 
   @override
@@ -41,9 +52,9 @@ class _TaskListViewState extends State<TaskListView> {
   }
 
   void _handleScroll() {
-    if (_scrollController.offset > 100 && _showCalendar) {
+    if (_scrollController.offset > 50 && _showCalendar) {
       setState(() => _showCalendar = false);
-    } else if (_scrollController.offset <= 100 && !_showCalendar) {
+    } else if (_scrollController.offset <= 50 && !_showCalendar) {
       setState(() => _showCalendar = true);
     }
   }
@@ -72,9 +83,18 @@ class _TaskListViewState extends State<TaskListView> {
     setState(() {});
   }
 
+  void _handleDateChange(DateTime date) {
+    widget.calendarController.displayDate = date;
+    setState(() {
+      _displayDate = date;
+      _currentWeekStart = _getWeekStart(date);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tasksForSelectedDay = _getTasksForDay(widget.selectedDate);
+    final displayDate = _displayDate ?? widget.selectedDate;
+    final tasksForSelectedDay = _getTasksForDay(displayDate);
     
     // Separate and sort tasks
     final timedTasks = tasksForSelectedDay.where((t) => t.startTime != null).toList()
@@ -83,24 +103,45 @@ class _TaskListViewState extends State<TaskListView> {
     
     final untimedTasks = tasksForSelectedDay.where((t) => t.startTime == null).toList();
 
-    return Column(
-      children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          child: _showCalendar ? _buildCalendar() : _buildWeekHeader(),
-        ),
-        Expanded(
-          child: ListView(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              ...untimedTasks.map((task) => _buildUntimedTaskItem(task)),
-              ...timedTasks.map((task) => _buildTimedTaskItem(task)),
-              const SizedBox(height: 16),
-            ],
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        // Let the scroll controller handle the notification too
+        return false;
+      },
+      child: Column(
+        children: [
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: _showCalendar 
+                ? _buildCalendar() 
+                : _buildWeekHeader(),
           ),
-        ),
-      ],
+          Expanded(
+            child: ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                if (tasksForSelectedDay.isEmpty)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Text(
+                        'No tasks for this day',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  )
+                else ...[
+                  ...untimedTasks.map((task) => _buildUntimedTaskItem(task)),
+                  ...timedTasks.map((task) => _buildTimedTaskItem(task)),
+                ],
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -109,15 +150,10 @@ class _TaskListViewState extends State<TaskListView> {
       height: 300,
       margin: const EdgeInsets.only(bottom: 8),
       child: CalendarDatePicker(
-        initialDate: widget.selectedDate,
+        initialDate: _displayDate ?? widget.selectedDate,
         firstDate: DateTime(2020),
         lastDate: DateTime(2100),
-        onDateChanged: (date) {
-          widget.calendarController.displayDate = date;
-          setState(() {
-            _currentWeekStart = _getWeekStart(date);
-          });
-        },
+        onDateChanged: _handleDateChange,
       ),
     );
   }
@@ -134,7 +170,7 @@ class _TaskListViewState extends State<TaskListView> {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: weekDays.map((day) {
-          final isSelected = day.day == widget.selectedDate.day;
+          final isSelected = day.day == (_displayDate ?? widget.selectedDate).day;
           return Container(
             width: 50,
             margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -143,10 +179,7 @@ class _TaskListViewState extends State<TaskListView> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: InkWell(
-              onTap: () {
-                widget.calendarController.displayDate = day;
-                setState(() {});
-              },
+              onTap: () => _handleDateChange(day),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

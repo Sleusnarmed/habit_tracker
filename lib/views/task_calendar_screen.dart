@@ -49,9 +49,8 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              DateFormat(
-                'MMMM yyyy',
-              ).format(_calendarController.displayDate ?? DateTime.now()),
+              DateFormat('MMMM yyyy').format(
+                  _calendarController.displayDate ?? DateTime.now()),
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             IconButton(
@@ -68,28 +67,29 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      body:
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Column(
-                children: [
-                  if (_showQuickOptions)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildViewOption('List'),
-                          _buildViewOption('Month'),
-                          _buildViewOption('Day'),
-                          _buildViewOption('3 Days'),
-                          _buildViewOption('Weekly'),
-                        ],
-                      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                if (_showQuickOptions)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildViewOption('List'),
+                        _buildViewOption('Month'),
+                        _buildViewOption('Day'),
+                        _buildViewOption('3 Days'),
+                        _buildViewOption('Weekly'),
+                      ],
                     ),
-                  Expanded(child: _buildCurrentView()),
-                ],
-              ),
+                  ),
+                Expanded(
+                  child: _buildCurrentView(),
+                ),
+              ],
+            ),
     );
   }
 
@@ -99,15 +99,32 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
         setState(() {
           _currentView = viewName;
           _showQuickOptions = false;
+          
+          // Update the calendar controller's view based on selection
+          switch (viewName) {
+            case 'Month':
+              _calendarController.view = CalendarView.month;
+              break;
+            case 'Day':
+              _calendarController.view = CalendarView.day;
+              break;
+            case '3 Days':
+              _calendarController.view = CalendarView.week;
+              break;
+            case 'Weekly':
+              _calendarController.view = CalendarView.week;
+              break;
+            case 'List':
+              break;
+          }
         });
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color:
-              _currentView == viewName
-                  ? Colors.orange.withOpacity(0.2)
-                  : Colors.transparent,
+          color: _currentView == viewName
+              ? Colors.orange.withOpacity(0.2)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -123,6 +140,9 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   }
 
   Widget _buildCurrentView() {
+    // Always get fresh appointments when building the view
+    final appointments = _getAppointments();
+    
     switch (_currentView) {
       case 'List':
         return TaskListView(
@@ -133,25 +153,29 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
       case 'Month':
         return MonthView(
           calendarController: _calendarController,
-          tasks: _getAppointments(),
+          tasks: appointments,
+          key: ValueKey('MonthView-${_calendarController.displayDate}'), 
         );
       case 'Day':
         return DayView(
           calendarController: _calendarController,
-          tasks: _getAppointments(),
+          tasks: appointments,
+          key: ValueKey('DayView-${_calendarController.displayDate}'),
         );
       case '3 Days':
         return ThreeDayView(
           calendarController: _calendarController,
-          tasks: _getAppointments(),
+          tasks: appointments,
+          key: ValueKey('ThreeDayView-${_calendarController.displayDate}'), 
         );
       case 'Weekly':
         return WeeklyView(
           calendarController: _calendarController,
-          appointments: _getAppointments(),
+          appointments: appointments,
           onTaskTap: (task) {
             print('Task tapped: ${task.title}');
           },
+          key: ValueKey('WeeklyView-${_calendarController.displayDate}'), 
         );
       default:
         return TaskListView(
