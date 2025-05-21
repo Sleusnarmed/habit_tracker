@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:habit_tracker/widgets/task_detail_sheet.dart';
-import 'package:hive/hive.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
@@ -8,7 +7,7 @@ import '../../models/task.dart';
 
 class TaskListView extends StatefulWidget {
   final CalendarController calendarController;
-  final Box<Task> tasksBox;
+  final List<Task> tasks;  // Changed from tasksBox to tasks list
   final DateTime selectedDate;
   final List<String> categories;
   final Function(Task) onTaskUpdated;
@@ -19,7 +18,7 @@ class TaskListView extends StatefulWidget {
   const TaskListView({
     super.key,
     required this.calendarController,
-    required this.tasksBox,
+    required this.tasks,
     required this.selectedDate,
     required this.categories,
     required this.onTaskUpdated,
@@ -37,6 +36,7 @@ class _TaskListViewState extends State<TaskListView> {
   late DateTime _currentWeekStart;
   DateTime? _displayDate;
   var _pageController = PageController();
+
   @override
   void initState() {
     super.initState();
@@ -72,22 +72,23 @@ class _TaskListViewState extends State<TaskListView> {
   }
 
   List<Task> _getTasksForDay(DateTime day) {
-    return widget.tasksBox.values
-        .where(
-          (task) =>
-              task.dueDate != null &&
-              task.dueDate!.year == day.year &&
-              task.dueDate!.month == day.month &&
-              task.dueDate!.day == day.day,
-        )
-        .toList();
+    return widget.tasks.where((task) {
+      if (task.dueDate == null) return false;
+      
+      final taskDate = DateTime(
+        task.dueDate!.year, 
+        task.dueDate!.month, 
+        task.dueDate!.day
+      );
+      final displayDate = DateTime(day.year, day.month, day.day);
+      
+      return taskDate.isAtSameMomentAs(displayDate);
+    }).toList();
   }
 
   Future<void> _toggleTaskCompletion(Task task) async {
     final updatedTask = task.copyWith(isCompleted: !task.isCompleted);
-    await widget.tasksBox.put(task.id, updatedTask);
     widget.onTaskUpdated(updatedTask);
-    setState(() {});
   }
 
   void _handleDateChange(DateTime date) {
@@ -102,21 +103,15 @@ class _TaskListViewState extends State<TaskListView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder:
-          (context) => TaskDetailSheet(
-            task: task,
-            categories: widget.categories,
-            onSave: (updatedTask) async {
-              await widget.tasksBox.put(updatedTask.id, updatedTask);
-              widget.onTaskUpdated(updatedTask);
-              setState(() {});
-            },
-            onDelete: () async {
-              await widget.tasksBox.delete(task.id);
-              widget.onTaskDeleted(task);
-              if (mounted) Navigator.pop(context);
-            },
-          ),
+      builder: (context) => TaskDetailSheet(
+        task: task,
+        categories: widget.categories,
+        onSave: (updatedTask) => widget.onTaskUpdated(updatedTask),
+        onDelete: () {
+          widget.onTaskDeleted(task);
+          if (mounted) Navigator.pop(context);
+        },
+      ),
     );
   }
 
@@ -128,8 +123,7 @@ class _TaskListViewState extends State<TaskListView> {
         firstDay: DateTime(2020),
         lastDay: DateTime.now().add(const Duration(days: 365 * 10)),
         focusedDay: _displayDate ?? widget.selectedDate,
-        selectedDayPredicate:
-            (day) => isSameDay(day, _displayDate ?? widget.selectedDate),
+        selectedDayPredicate: (day) => isSameDay(day, _displayDate ?? widget.selectedDate),
         onDaySelected: (selectedDay, focusedDay) {
           _handleDateChange(selectedDay);
         },
@@ -174,17 +168,13 @@ class _TaskListViewState extends State<TaskListView> {
         scrollDirection: Axis.horizontal,
         physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
         onPageChanged: (index) {
-          // Calculate the week offset (1 = next week, -1 = previous week)
           final weekOffset = index > 1 ? 1 : (index < 1 ? -1 : 0);
-          final newWeekStart = _currentWeekStart.add(
-            Duration(days: weekOffset * 7),
-          );
+          final newWeekStart = _currentWeekStart.add(Duration(days: weekOffset * 7));
 
           setState(() {
             _currentWeekStart = newWeekStart;
             final daysInWeek = _getWeekDays(newWeekStart);
-            final currentWeekday =
-                (_displayDate ?? widget.selectedDate).weekday % 7;
+            final currentWeekday = (_displayDate ?? widget.selectedDate).weekday % 7;
             _displayDate = daysInWeek.firstWhere(
               (day) => day.weekday % 7 == currentWeekday,
               orElse: () => daysInWeek.first,
@@ -214,44 +204,40 @@ class _TaskListViewState extends State<TaskListView> {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children:
-            weekDays.map((day) {
-              final isSelected = isSameDay(
-                day,
-                _displayDate ?? widget.selectedDate,
-              );
-              return Expanded(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.orange : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: InkWell(
-                    onTap: () => _handleDateChange(day),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          DateFormat('E').format(day),
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          day.day.toString(),
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.black,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+        children: weekDays.map((day) {
+          final isSelected = isSameDay(day, _displayDate ?? widget.selectedDate);
+          return Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.orange : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: InkWell(
+                onTap: () => _handleDateChange(day),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      DateFormat('E').format(day),
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
+                    Text(
+                      day.day.toString(),
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-              );
-            }).toList(),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -285,10 +271,9 @@ class _TaskListViewState extends State<TaskListView> {
                     width: 2,
                   ),
                 ),
-                child:
-                    task.isCompleted
-                        ? const Icon(Icons.check, size: 16, color: Colors.white)
-                        : null,
+                child: task.isCompleted
+                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                    : null,
               ),
             ),
             Expanded(
@@ -303,10 +288,9 @@ class _TaskListViewState extends State<TaskListView> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    decoration:
-                        task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
+                    decoration: task.isCompleted
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
                     decorationThickness: 2,
                     decorationColor: Colors.grey,
                     color: task.isCompleted ? Colors.grey : Colors.black,
@@ -331,17 +315,9 @@ class _TaskListViewState extends State<TaskListView> {
             SizedBox(
               width: 80,
               child: Text(
-                DateFormat('h:mma')
-                    .format(
-                      DateTime(
-                        0,
-                        0,
-                        0,
-                        task.startTime!.hour,
-                        task.startTime!.minute,
-                      ),
-                    )
-                    .toLowerCase(),
+                DateFormat('h:mma').format(
+                  DateTime(0, 0, 0, task.startTime!.hour, task.startTime!.minute),
+                ).toLowerCase(),
                 style: const TextStyle(fontSize: 14),
               ),
             ),
@@ -359,10 +335,9 @@ class _TaskListViewState extends State<TaskListView> {
                     width: 2,
                   ),
                 ),
-                child:
-                    task.isCompleted
-                        ? const Icon(Icons.check, size: 16, color: Colors.white)
-                        : null,
+                child: task.isCompleted
+                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                    : null,
               ),
             ),
             Expanded(
@@ -377,10 +352,9 @@ class _TaskListViewState extends State<TaskListView> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    decoration:
-                        task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
+                    decoration: task.isCompleted
+                        ? TextDecoration.lineThrough
+                        : TextDecoration.none,
                     decorationThickness: 2,
                     decorationColor: Colors.grey,
                     color: task.isCompleted ? Colors.grey : Colors.black,
@@ -399,15 +373,13 @@ class _TaskListViewState extends State<TaskListView> {
     final displayDate = _displayDate ?? widget.selectedDate;
     final tasksForSelectedDay = _getTasksForDay(displayDate);
 
-    final timedTasks =
-        tasksForSelectedDay.where((t) => t.startTime != null).toList()..sort(
-          (a, b) => (a.startTime!.hour * 60 + a.startTime!.minute).compareTo(
-            b.startTime!.hour * 60 + b.startTime!.minute,
-          ),
-        );
+    final timedTasks = tasksForSelectedDay
+        .where((t) => t.startTime != null)
+        .toList()
+      ..sort((a, b) => (a.startTime!.hour * 60 + a.startTime!.minute)
+          .compareTo(b.startTime!.hour * 60 + b.startTime!.minute));
 
-    final untimedTasks =
-        tasksForSelectedDay.where((t) => t.startTime == null).toList();
+    final untimedTasks = tasksForSelectedDay.where((t) => t.startTime == null).toList();
 
     return Column(
       children: [
@@ -418,13 +390,10 @@ class _TaskListViewState extends State<TaskListView> {
         ),
         Expanded(
           child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              return true; 
-            },
+            onNotification: (notification) => true,
             child: ListView(
               controller: _scrollController,
-              physics:
-                  const ClampingScrollPhysics(), 
+              physics: const ClampingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
                 if (tasksForSelectedDay.isEmpty)

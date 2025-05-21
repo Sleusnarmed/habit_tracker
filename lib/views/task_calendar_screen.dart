@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:habit_tracker/services/calendar_preferences.dart';
-import 'package:hive/hive.dart';
 import 'package:habit_tracker/widgets/calendarScreen/list_view.dart';
 import 'package:habit_tracker/widgets/calendarScreen/month_view.dart';
 import 'package:habit_tracker/widgets/calendarScreen/day_view.dart';
@@ -21,8 +21,7 @@ class TaskCalendarScreen extends StatefulWidget {
 
 class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   late CalendarController _calendarController;
-  late Box<Task> _tasksBox;
-  bool _isLoading = true;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   bool _showQuickOptions = false;
   String _currentView = CalendarPreferences.currentView;
   double _dragDistance = 0;
@@ -32,22 +31,27 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
   void initState() {
     super.initState();
     _calendarController = CalendarController();
-    _initializeHive();
-  }
-
-  Future<void> _initializeHive() async {
-    _tasksBox = await Hive.openBox<Task>('tasks');
-    setState(() => _isLoading = false);
+    // No initialization needed for Firestore
   }
 
   Future<void> _updateTask(Task updatedTask) async {
-    await _tasksBox.put(updatedTask.id, updatedTask);
-    setState(() {});
+    try {
+      await _firestore.collection('tasks').doc(updatedTask.id).update(updatedTask.toFirestore());
+      // No need for setState, StreamBuilder will handle updates
+    } catch (e) {
+      print('Error updating task: $e');
+      // Handle error as needed
+    }
   }
 
   Future<void> _deleteTask(Task task) async {
-    await _tasksBox.delete(task.id);
-    setState(() {});
+    try {
+      await _firestore.collection('tasks').doc(task.id).delete();
+      // No need for setState, StreamBuilder will handle updates
+    } catch (e) {
+      print('Error deleting task: $e');
+      // Handle error as needed
+    }
   }
 
   @override
@@ -82,32 +86,44 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _currentView == 'List'
-              ? GestureDetector(
-                  onVerticalDragStart: (_) => _dragDistance = 0,
-                  onVerticalDragUpdate: (details) {
-                    if (details.delta.dy.abs() > details.delta.dx.abs()) {
-                      _dragDistance += details.delta.dy;
-                    }
-                  },
-                  onVerticalDragEnd: (_) {
-                    if (_dragDistance < -50 && _showCalendar) {
-                      setState(() => _showCalendar = false);
-                    } else if (_dragDistance > 50 && !_showCalendar) {
-                      setState(() => _showCalendar = true);
-                    }
-                    _dragDistance = 0;
-                  },
-                  child: Column(
-                    children: [
-                      if (_showQuickOptions)
-                        _buildQuickOptionsContainer(),
-                      Expanded(
-                        child: TaskListView(
+      body: _currentView == 'List'
+          ? GestureDetector(
+              onVerticalDragStart: (_) => _dragDistance = 0,
+              onVerticalDragUpdate: (details) {
+                if (details.delta.dy.abs() > details.delta.dx.abs()) {
+                  _dragDistance += details.delta.dy;
+                }
+              },
+              onVerticalDragEnd: (_) {
+                if (_dragDistance < -50 && _showCalendar) {
+                  setState(() => _showCalendar = false);
+                } else if (_dragDistance > 50 && !_showCalendar) {
+                  setState(() => _showCalendar = true);
+                }
+                _dragDistance = 0;
+              },
+              child: Column(
+                children: [
+                  if (_showQuickOptions) _buildQuickOptionsContainer(),
+                  Expanded(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: _firestore.collection('tasks').snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return Center(child: Text('Error: ${snapshot.error}'));
+                        }
+
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+
+                        final tasks = snapshot.data!.docs
+                            .map((doc) => Task.fromFirestore(doc))
+                            .toList();
+
+                        return TaskListView(
                           calendarController: _calendarController,
-                          tasksBox: _tasksBox,
+                          tasks: tasks,
                           selectedDate: _calendarController.displayDate ?? DateTime.now(),
                           categories: widget.categories,
                           onTaskUpdated: _updateTask,
@@ -116,18 +132,39 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
                           onCalendarVisibilityChanged: (visible) {
                             setState(() => _showCalendar = visible);
                           },
-                        ),
-                      ),
-                    ],
+                        );
+                      },
+                    ),
                   ),
-                )
-              : Column(
-                  children: [
-                    if (_showQuickOptions)
-                      _buildQuickOptionsContainer(),
-                    Expanded(child: _buildCurrentView()),
-                  ],
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                if (_showQuickOptions) _buildQuickOptionsContainer(),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: _firestore.collection('tasks').snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
+
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final tasks = snapshot.data!.docs
+                          .map((doc) => Task.fromFirestore(doc))
+                          .where((task) => task.dueDate != null)
+                          .toList();
+
+                      return _buildCurrentView(tasks);
+                    },
+                  ),
                 ),
+              ],
+            ),
     );
   }
 
@@ -166,7 +203,7 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           _showQuickOptions = false;
           if (viewName != 'List') {
             _calendarController.view = _getCalendarView(viewName);
-            _showCalendar = true; // Reset calendar visibility when switching views
+            _showCalendar = true;
           }
         });
       },
@@ -205,15 +242,14 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
     }
   }
 
-  Widget _buildCurrentView() {
-    final appointments = _getAppointments();
+  Widget _buildCurrentView(List<Task> tasks) {
     final currentDate = _calendarController.displayDate ?? DateTime.now();
 
     switch (_currentView) {
       case 'List':
         return TaskListView(
           calendarController: _calendarController,
-          tasksBox: _tasksBox,
+          tasks: tasks,
           selectedDate: currentDate,
           categories: widget.categories,
           onTaskUpdated: _updateTask,
@@ -226,33 +262,33 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
       case 'Month':
         return MonthView(
           calendarController: _calendarController,
-          tasks: appointments,
+          tasks: tasks,
           key: ValueKey('MonthView-$currentDate'),
         );
       case 'Day':
         return DayView(
           calendarController: _calendarController,
-          appointments: appointments,
+          appointments: tasks,
           onTaskTap: (task) {},
           key: ValueKey('DayView-$currentDate'),
         );
       case '3 Days':
         return ThreeDayView(
           calendarController: _calendarController,
-          tasks: appointments,
+          tasks: tasks,
           key: ValueKey('ThreeDayView-$currentDate'),
         );
       case 'Weekly':
         return WeeklyView(
           calendarController: _calendarController,
-          appointments: appointments,
+          appointments: tasks,
           onTaskTap: (task) {},
           key: ValueKey('WeeklyView-$currentDate'),
         );
       default:
         return TaskListView(
           calendarController: _calendarController,
-          tasksBox: _tasksBox,
+          tasks: tasks,
           selectedDate: currentDate,
           categories: widget.categories,
           onTaskUpdated: _updateTask,
@@ -263,9 +299,5 @@ class _TaskCalendarScreenState extends State<TaskCalendarScreen> {
           },
         );
     }
-  }
-
-  List<Task> _getAppointments() {
-    return _tasksBox.values.where((task) => task.dueDate != null).toList();
   }
 }
