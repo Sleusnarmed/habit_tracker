@@ -1,8 +1,6 @@
-import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
-
-part 'task.g.dart'; // Generated file
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum TaskPriority { high, medium, low, none }
 
@@ -16,36 +14,16 @@ enum TaskRepetition {
   weekdays,
 }
 
-@HiveType(typeId: 0)
 class Task {
-  @HiveField(0)
   final String id;
-
-  @HiveField(1)
   final String title;
-
-  @HiveField(2)
   final String category;
-
-  @HiveField(3)
   bool isCompleted;
-
-  @HiveField(4)
   final String description;
-
-  @HiveField(5)
   final TaskPriority priority;
-
-  @HiveField(6)
   final DateTime? dueDate;
-
-  @HiveField(7)
   final TimeOfDay? startTime;
-
-  @HiveField(8)
   final TimeOfDay? endTime;
-
-  @HiveField(9)
   final TaskRepetition repetition;
 
   Task({
@@ -66,6 +44,62 @@ class Task {
         throw ArgumentError('End time must be after start time');
       }
     }
+  }
+
+  /// Convierte el objeto Task a un Map para Firestore
+  Map<String, dynamic> toFirestore() {
+    return {
+      'id': id,
+      'title': title,
+      'category': category,
+      'isCompleted': isCompleted,
+      'description': description,
+      'priority': priority.index,
+      'dueDate': dueDate?.toIso8601String(),
+      'startTime':
+          startTime != null
+              ? {'hour': startTime!.hour, 'minute': startTime!.minute}
+              : null,
+      'endTime':
+          endTime != null
+              ? {'hour': endTime!.hour, 'minute': endTime!.minute}
+              : null,
+      'repetition': repetition.index,
+      'createdAt': FieldValue.serverTimestamp(), // Opcional para ordenamiento
+      'updatedAt': FieldValue.serverTimestamp(), // Opcional para seguimiento
+    };
+  }
+
+  /// Crea un Task desde un DocumentSnapshot de Firestore
+  factory Task.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Task(
+      id: data['id'],
+      title: data['title'],
+      category: data['category'],
+      isCompleted: data['isCompleted'] ?? false,
+      description: data['description'] ?? '',
+      priority:
+          TaskPriority.values[data['priority'] ?? TaskPriority.none.index],
+      dueDate: data['dueDate'] != null ? DateTime.parse(data['dueDate']) : null,
+      startTime:
+          data['startTime'] != null
+              ? TimeOfDay(
+                hour: data['startTime']['hour'],
+                minute: data['startTime']['minute'],
+              )
+              : null,
+      endTime:
+          data['endTime'] != null
+              ? TimeOfDay(
+                hour: data['endTime']['hour'],
+                minute: data['endTime']['minute'],
+              )
+              : null,
+      repetition:
+          TaskRepetition.values[data['repetition'] ??
+              TaskRepetition.never.index],
+    );
   }
 
   /// Returns true if this task has both start and end times
@@ -133,7 +167,7 @@ class Task {
     );
   }
 
-  /// Formatted time range 
+  /// Formatted time range
   String? get formattedTimeRange {
     if (!hasTimeRange) {
       if (startTime == null) return null;
@@ -142,7 +176,7 @@ class Task {
     return '${_formatTimeOfDay(startTime!)} - ${_formatTimeOfDay(endTime!)}';
   }
 
-  /// Formatted duration in hours and minutes 
+  /// Formatted duration in hours and minutes
   String? get formattedDuration {
     if (!hasTimeRange) return null;
     final dur = duration!;
@@ -175,9 +209,8 @@ class Task {
       case TaskRepetition.weekly:
         return dueDate!.weekday == now.weekday;
       case TaskRepetition.monthly:
-       
         if (dueDate!.day > now.day && now.month == DateTime.december) {
-          return false; 
+          return false;
         }
         return dueDate!.day == now.day;
       case TaskRepetition.yearly:
@@ -222,69 +255,32 @@ class Task {
     return DateFormat.jm().format(dt);
   }
 
-  static void registerAdapters() {
-    if (!Hive.isAdapterRegistered(0)) {
-      Hive.registerAdapter(TaskAdapter());
-    }
-    if (!Hive.isAdapterRegistered(1)) {
-      Hive.registerAdapter(TaskPriorityAdapter());
-    }
-    if (!Hive.isAdapterRegistered(2)) {
-      Hive.registerAdapter(TaskRepetitionAdapter());
-    }
-    if (!Hive.isAdapterRegistered(3)) {
-      Hive.registerAdapter(TimeOfDayAdapter());
-    }
-  }
-}
-
-class TaskPriorityAdapter extends TypeAdapter<TaskPriority> {
   @override
-  final int typeId = 1;
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Task &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          title == other.title &&
+          category == other.category &&
+          isCompleted == other.isCompleted &&
+          description == other.description &&
+          priority == other.priority &&
+          dueDate == other.dueDate &&
+          startTime == other.startTime &&
+          endTime == other.endTime &&
+          repetition == other.repetition;
 
   @override
-  TaskPriority read(BinaryReader reader) {
-    return TaskPriority.values[reader.readByte()];
-  }
-
-  @override
-  void write(BinaryWriter writer, TaskPriority obj) {
-    writer.writeByte(obj.index);
-  }
-}
-
-class TaskRepetitionAdapter extends TypeAdapter<TaskRepetition> {
-  @override
-  final int typeId = 2;
-
-  @override
-  TaskRepetition read(BinaryReader reader) {
-    return TaskRepetition.values[reader.readByte()];
-  }
-
-  @override
-  void write(BinaryWriter writer, TaskRepetition obj) {
-    writer.writeByte(obj.index);
-  }
-}
-
-class TimeOfDayAdapter extends TypeAdapter<TimeOfDay> {
-  @override
-  final int typeId = 3;
-
-  @override
-  TimeOfDay read(BinaryReader reader) {
-    final hour = reader.readByte();
-    final minute = reader.readByte();
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      return const TimeOfDay(hour: 0, minute: 0);
-    }
-    return TimeOfDay(hour: hour, minute: minute);
-  }
-
-  @override
-  void write(BinaryWriter writer, TimeOfDay obj) {
-    writer.writeByte(obj.hour);
-    writer.writeByte(obj.minute);
-  }
+  int get hashCode =>
+      id.hashCode ^
+      title.hashCode ^
+      category.hashCode ^
+      isCompleted.hashCode ^
+      description.hashCode ^
+      priority.hashCode ^
+      dueDate.hashCode ^
+      startTime.hashCode ^
+      endTime.hashCode ^
+      repetition.hashCode;
 }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "394512063889",
+    "project_id": "task-manament-era",
+    "storage_bucket": "task-manament-era.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:394512063889:android:0189904c2227366292ce30",
+        "android_client_info": {
+          "package_name": "com.example.habit_tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjFs12TAPHlqUvZWqpF25bM1_TOTz2HBg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
